@@ -1,0 +1,94 @@
+Continue CureCompass from current state (do not restart from scratch).
+
+Project: CureCompass
+Stack:
+- Frontend: Next.js App Router + TypeScript + Tailwind + Zustand
+- Backend: FastAPI + SQLAlchemy 2 + Alembic + PostgreSQL + Redis + Celery
+- AI: OpenAI Responses API + embeddings
+
+Current progress:
+- Auth implemented: register/login/me/refresh/forgot-password/reset-password
+- Condition follow/onboarding/profile/notification settings implemented
+- Ingestion implemented (adapter-based):
+  - PubMed (NCBI eutils)
+  - ClinicalTrials.gov v2 (graceful on 403)
+  - openFDA
+- Manual backfill endpoint works: POST /api/ingestion/backfill
+- AI enrichment implemented:
+  - ResearchItemAI generation with structured outputs
+  - embeddings stored in research_item_embeddings
+  - dashboard shows AI summaries
+- Ask AI (Phase 5):
+  - POST /api/conditions/{slug}/ask-ai
+  - condition-limited, guarded, retrieved from trusted indexed docs
+  - structured sections + citations
+  - conversation/message persistence
+  - UI on /conditions/[slug]
+- Research briefings / digests (Phase 6) — DONE:
+  - Daily/weekly/major generation (DigestService + OpenAI strict JSON schema patch)
+  - Storage + API: list, detail, POST /digests/generate, DELETE /digests/{id}
+  - POST /digests/{id}/email — resend briefing to account email
+  - SMTP: multipart HTML + plain text, optional SMTP_DIGEST_REPLY_TO / SMTP_REPLY_TO, transactional headers
+  - Celery task digests.run_scheduled + beat_schedule (daily 07:00 UTC, weekly Mon 08:00 UTC, major 08:30 UTC)
+  - UI: /digests list, /digests/[id] detail (generate, delete, email me)
+- Phase 7: /legal/disclaimer|privacy|terms + footer; /bookmarks; /trials/[id]; condition tabs; /admin (jobs + sources + PATCH source enabled + backfill form; is_admin)
+
+Important implementation notes:
+- pgvector extension may be unavailable on some Postgres installs.
+- Embeddings table can use JSON column fallback (not native vector type) until pgvector is enabled.
+- OpenAI strict JSON schemas: patched (e.g. required includes all properties, ConditionDigestOut / Ask AI / enrichment).
+- Frequent token expiry during testing; refresh flow exists.
+- Scheduled digests require Redis + Celery worker + Celery beat in environments where task_always_eager is false.
+- Dev: celery_app sets task_always_eager when ENVIRONMENT=development — differs from production scheduling.
+
+Recent validated behavior (historical):
+- /api/ingestion/backfill for nf1; /api/dashboard; Ask AI on /conditions/nf1; digests + email flows user-tested.
+
+What to do next (suggested Phase 7+):
+1) ~~Operations: Redis + Celery worker + Beat~~ — see docs/ops-redis-celery.md and infra/docker-compose.yml (Redis)
+2) Infra: optional full stack Compose (API + Postgres + Redis + worker + beat) or K8s manifests
+3) When Postgres supports it: migrate embeddings to pgvector column + IVFFlat/HNSW as appropriate
+4) Hardening: CI (tests/lint), E2E smoke, SECRET_KEY and secrets only in .env / vault
+5) Product polish: ranking UX, per-condition notification deep-link, more admin actions (e.g. trust_score edits), analytics
+6) Done recently: legal pages (/legal/*) + site footer; /bookmarks UI; GET /api/trials/{id} + /trials/[id] page; condition page tabs (Updates / Trials / Ask AI / More); admin UI + GET /api/admin/jobs|sources + PATCH /api/admin/sources/{id} (enabled); admin backfill form → POST /api/ingestion/backfill (requires users.is_admin=true in DB for full access)
+
+Repo-specific endpoints currently available (major):
+- POST /api/auth/register
+- POST /api/auth/login
+- POST /api/auth/refresh
+- POST /api/auth/forgot-password
+- POST /api/auth/reset-password
+- GET /api/auth/me
+- GET /api/conditions
+- GET /api/conditions/search
+- GET /api/conditions/by-slug/{slug}
+- POST /api/conditions/{condition_id}/follow
+- DELETE /api/conditions/{condition_id}/follow
+- PUT /api/conditions/by-slug/{slug}/notification-settings
+- GET /api/dashboard
+- GET /api/notification-settings
+- PUT /api/notification-settings
+- POST /api/ingestion/backfill
+- GET /api/ingestion/jobs/{job_id}
+- POST /api/ai/enrich
+- POST /api/conditions/{slug}/ask-ai
+- GET /api/conditions/{slug}/ask-ai/conversations
+- GET /api/ask-ai/conversations/{conversation_id}
+- GET /api/digests
+- POST /api/digests/generate
+- GET /api/digests/{digest_id}
+- DELETE /api/digests/{digest_id}
+- POST /api/digests/{digest_id}/email
+- GET /api/bookmarks
+- POST /api/bookmarks/{research_item_id}
+- DELETE /api/bookmarks/{research_item_id}
+- GET /api/trials/{trial_id}
+- GET /api/admin/jobs (admin only)
+- GET /api/admin/sources (admin only)
+- PATCH /api/admin/sources/{source_id} (admin only, body: { enabled })
+
+Please:
+- Inspect existing files and continue from current architecture.
+- Keep changes production-minded and consistent with current style.
+- Run migrations/tests/lints after substantial edits.
+- Continue phase-by-phase with concise progress summaries.

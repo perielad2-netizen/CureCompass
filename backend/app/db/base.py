@@ -1,0 +1,17 @@
+from app.models.entities import (  # noqa: F401
+    AdminJobRun,
+    PasswordResetToken,
+    AskAIConversation,
+    AskAIMessage,
+    Bookmark,
+    Condition,
+    Digest,
+    NotificationPreference,
+    ResearchItem,
+    ResearchItemAI,
+    ResearchItemEmbedding,
+    Source,
+    Trial,
+    User,
+    UserFollowedCondition,
+)

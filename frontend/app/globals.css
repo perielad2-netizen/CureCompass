@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply min-h-screen bg-background bg-page-mesh text-foreground antialiased;
+}
+
+::selection {
+  @apply bg-primary/20 text-navy;
+}
+
+.container-page {
+  @apply mx-auto max-w-6xl px-4 md:px-6;
+}

@@ -1,0 +1,23 @@
+# Minimal Redis for CureCompass Celery (broker + result backend).
+# Usage: docker compose -f infra/docker-compose.yml up -d
+# Set REDIS_URL=redis://localhost:6379/0 in backend/.env (default matches this port).
+#
+# Celery worker and Beat are not containerized here—run them on the host or your own
+# image using the commands in docs/ops-redis-celery.md.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - curecompass-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  curecompass-redis-data:
