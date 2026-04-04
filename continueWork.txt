@@ -87,6 +87,9 @@ Repo-specific endpoints currently available (major):
 - GET /api/admin/sources (admin only)
 - PATCH /api/admin/sources/{source_id} (admin only, body: { enabled })
 
+Git:
+- Repo initialized locally on branch `main`; add GitHub remote and `git push -u origin main` when ready (see docs/deploy-github-linux.md).
+
 Please:
 - Inspect existing files and continue from current architecture.
 - Keep changes production-minded and consistent with current style.
