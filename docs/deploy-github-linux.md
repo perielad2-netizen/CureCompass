@@ -3,11 +3,21 @@
 ## 1. Create the GitHub repository
 
 1. On GitHub: **New repository** → name it (e.g. `curecompass`), leave it **empty** (no README, no .gitignore, no license) so your first push can be clean.
-2. Note the remote URL, e.g. `https://github.com/YOUR_USER/curecompass.git` or the SSH form `git@github.com:YOUR_USER/curecompass.git`.
+2. Note the remote URL. This project’s canonical remote is `https://github.com/perielad2-netizen/CureCompass.git` (SSH: `git@github.com:perielad2-netizen/CureCompass.git`).
 
 ## 2. Push this project from your machine
 
 From the **repository root** (`cureCompass/`):
+
+If you already have a local repo with commits, skip `git init` / `git add` / `git commit`. Add or fix the remote with:
+
+```bash
+git remote add origin https://github.com/perielad2-netizen/CureCompass.git
+# If origin already exists:
+# git remote set-url origin https://github.com/perielad2-netizen/CureCompass.git
+```
+
+First-time setup from a new folder:
 
 ```bash
 git init
@@ -15,7 +25,7 @@ git add .
 git status   # confirm backend/.env and frontend secrets are NOT listed
 git commit -m "Initial commit: CureCompass monorepo"
 git branch -M main
-git remote add origin https://github.com/YOUR_USER/curecompass.git
+git remote add origin https://github.com/perielad2-netizen/CureCompass.git
 git push -u origin main
 ```
 
@@ -33,9 +43,9 @@ sudo apt install -y git python3.11 python3.11-venv nodejs npm postgresql-client 
 
 ```bash
 cd /opt   # or your preferred path
-sudo git clone https://github.com/YOUR_USER/curecompass.git
-sudo chown -R $USER:$USER curecompass
-cd curecompass
+sudo git clone https://github.com/perielad2-netizen/CureCompass.git
+sudo chown -R $USER:$USER CureCompass
+cd CureCompass
 ```
 
 ### Backend

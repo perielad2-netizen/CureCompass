@@ -1,5 +1,7 @@
 # CureCompass
 
+**Repository:** [github.com/perielad2-netizen/CureCompass](https://github.com/perielad2-netizen/CureCompass)
+
 CureCompass is a condition-focused medical research intelligence platform for patients, caregivers, and families.
 
 This repository contains:
