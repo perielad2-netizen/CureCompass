@@ -328,10 +328,12 @@ class DigestService:
         self,
         user: User,
         digest_type: str,
-        condition_slug: str | None,
+        condition_slugs: list[str] | None,
         *,
         force: bool = True,
     ) -> list[Digest]:
+        """If ``condition_slugs`` is None or empty, include every followed condition; else only slugs in the set."""
+        want: set[str] | None = set(condition_slugs) if condition_slugs else None
         q = select(UserFollowedCondition).where(UserFollowedCondition.user_id == user.id)
         follows = list(self.db.scalars(q).all())
         out: list[Digest] = []
@@ -339,7 +341,7 @@ class DigestService:
             condition = self.db.get(Condition, follow.condition_id)
             if not condition:
                 continue
-            if condition_slug and condition.slug != condition_slug:
+            if want is not None and condition.slug not in want:
                 continue
             pref = self.db.scalar(
                 select(NotificationPreference).where(

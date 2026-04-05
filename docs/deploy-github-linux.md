@@ -188,7 +188,8 @@ sudo ufw status
 ### 4.5 Smoke test
 
 - Site: `http://YOUR_HOST/` or `https://YOUR_HOST/`
-- API docs (if enabled in production): `http://YOUR_HOST/api/docs`
+- API health (via Nginx): `http://YOUR_HOST/api/health` — should return JSON `{"status":"ok",...}`.
+- Swagger UI is at **`/docs`** on the Gunicorn app only (e.g. `http://127.0.0.1:8000/docs`), not under `/api`. A typical Nginx setup that only proxies `location /api` does **not** expose `/docs` on the public hostname unless you add a separate `location` (often omitted in production for security).
 
 ---
 

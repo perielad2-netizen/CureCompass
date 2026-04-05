@@ -54,10 +54,12 @@ def generate_digests(
     current_user: User = Depends(get_current_user),
 ):
     svc = DigestService(db)
+    slugs = payload.condition_slugs
+    filter_slugs: list[str] | None = slugs if len(slugs) > 0 else None
     rows = svc.generate_for_user(
         current_user,
         payload.digest_type,
-        payload.condition_slug,
+        filter_slugs,
         force=True,
     )
     db.commit()
