@@ -1,6 +1,7 @@
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,11 @@ router = APIRouter(prefix="/bookmarks", tags=["bookmarks"])
 
 
 @router.get("", response_model=list[BookmarkListItem])
-def list_bookmarks(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_bookmarks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    locale: Literal["en", "he"] = Query(default="en"),
+):
     rows = db.scalars(
         select(Bookmark)
         .where(Bookmark.user_id == current_user.id)
@@ -26,7 +31,7 @@ def list_bookmarks(db: Session = Depends(get_db), current_user: User = Depends(g
         if not item:
             continue
         cond = db.get(Condition, item.condition_id)
-        core = serialize_research_item(db, item)
+        core = serialize_research_item(db, item, locale=locale)
         src = db.get(Source, item.source_id)
         summary = core["summary"]
         if len(summary) > 400:
@@ -41,6 +46,7 @@ def list_bookmarks(db: Session = Depends(get_db), current_user: User = Depends(g
                 source_url=item.source_url,
                 evidence_stage_label=core["evidence_stage_label"],
                 summary=summary,
+                recap_locale=core["recap_locale"],
             )
         )
     return out

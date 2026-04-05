@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -34,3 +36,8 @@ class UserMeOut(BaseModel):
     id: str
     email: EmailStr
     is_admin: bool
+    preferred_locale: Literal["en", "he"] = "en"
+
+
+class UserLocalePatchIn(BaseModel):
+    preferred_locale: Literal["en", "he"]

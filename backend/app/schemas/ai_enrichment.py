@@ -16,8 +16,16 @@ class HypeRisk(str, Enum):
 
 class ResearchItemEnrichmentOut(BaseModel):
     lay_summary: str = Field(min_length=40)
+    lay_summary_he: str = Field(
+        min_length=30,
+        description="Same meaning as lay_summary: short plain Hebrew for patients/caregivers in Israel.",
+    )
     clinician_summary: str = Field(min_length=40)
     why_it_matters: str = Field(min_length=20)
+    why_it_matters_he: str = Field(
+        min_length=12,
+        description="Same meaning as why_it_matters, in clear modern Hebrew.",
+    )
 
     evidence_stage: EvidenceClassification
     confidence_level: str = Field(pattern="^(low|medium|high)$")

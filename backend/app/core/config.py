@@ -45,5 +45,10 @@ class Settings(BaseSettings):
     smtp_digest_reply_to: str = ""
     password_reset_token_hours: int = 2
 
+    # Private uploads (PDF text extraction MVP). Treat directory as sensitive; restrict filesystem permissions in production.
+    private_documents_dir: str = "./data/private_documents"
+    private_document_max_bytes: int = 5_242_880  # 5 MiB
+    private_document_max_extracted_chars: int = 200_000
+
 
 settings = Settings()

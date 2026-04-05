@@ -1,6 +1,7 @@
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,11 @@ CT_GOV_STUDY_URL = "https://clinicaltrials.gov/study/{nct_id}"
 
 
 @router.get("", response_model=DashboardOut)
-def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    locale: Literal["en", "he"] = Query(default="en", description="UI locale for digest preview fallbacks"),
+):
     follows = db.scalars(select(UserFollowedCondition).where(UserFollowedCondition.user_id == current_user.id)).all()
     condition_ids = [f.condition_id for f in follows]
     conditions = db.scalars(select(Condition).where(Condition.id.in_(condition_ids))).all() if condition_ids else []
@@ -45,7 +50,7 @@ def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(ge
 
     latest_updates: list[LatestUpdateOut] = []
     for item in recent_items:
-        core = serialize_research_item(db, item)
+        core = serialize_research_item(db, item, locale=locale)
         cond = db.get(Condition, item.condition_id)
         latest_updates.append(
             LatestUpdateOut(
@@ -58,6 +63,7 @@ def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(ge
                 evidence_stage_label=core["evidence_stage_label"],
                 summary=core["summary"],
                 why_it_matters=core["why_it_matters"],
+                recap_locale=core["recap_locale"],
                 bookmarked=item.id in bookmarked_ids,
                 condition_slug=cond.slug if cond else "",
                 condition_name=cond.canonical_name if cond else "",
@@ -72,10 +78,21 @@ def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(ge
     )
     if latest_digest:
         digest_preview = latest_digest.title
+        digest_preview_kind = "latest_digest"
     elif not recent_items:
-        digest_preview = "No major changes in the last 24 hours."
+        digest_preview_kind = "empty_feed"
+        digest_preview = (
+            "אין שינויים גדולים ב־24 השעות האחרונות."
+            if locale == "he"
+            else "No major changes in the last 24 hours."
+        )
     else:
-        digest_preview = "You have new trusted updates available."
+        digest_preview_kind = "has_updates"
+        digest_preview = (
+            "יש לכם עדכונים מהימנים חדשים."
+            if locale == "he"
+            else "You have new trusted updates available."
+        )
 
     recruiting: list[DashboardRecruitingTrialOut] = []
     if condition_ids:
@@ -107,5 +124,6 @@ def get_dashboard(db: Session = Depends(get_db), current_user: User = Depends(ge
         "latest_important_updates": latest_updates,
         "unread_updates": 0,
         "digest_preview": digest_preview,
+        "digest_preview_kind": digest_preview_kind,
         "upcoming_recruiting_trials": recruiting,
     }

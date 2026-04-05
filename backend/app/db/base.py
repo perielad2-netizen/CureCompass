@@ -14,4 +14,5 @@ from app.models.entities import (  # noqa: F401
     Trial,
     User,
     UserFollowedCondition,
+    UserPrivateDocument,
 )

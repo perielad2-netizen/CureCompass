@@ -1,22 +1,40 @@
 from sqlalchemy import select
 
+from app.db.conditions_catalog import CONDITIONS
 from app.db.session import SessionLocal
 from app.models.entities import Condition, Source
+
+
+def upsert_conditions(db) -> int:
+    """Insert missing conditions or refresh catalog fields for existing slugs. Returns rows touched."""
+    n = 0
+    for row in CONDITIONS:
+        slug = row["slug"]
+        existing = db.scalar(select(Condition).where(Condition.slug == slug))
+        if existing:
+            existing.canonical_name = row["canonical_name"]
+            existing.description = row["description"]
+            existing.synonyms = row["synonyms"]
+            existing.rare_disease_flag = row["rare_disease_flag"]
+            n += 1
+        else:
+            db.add(
+                Condition(
+                    canonical_name=row["canonical_name"],
+                    slug=slug,
+                    description=row["description"],
+                    synonyms=row["synonyms"],
+                    rare_disease_flag=row["rare_disease_flag"],
+                )
+            )
+            n += 1
+    return n
 
 
 def seed_initial_data() -> None:
     db = SessionLocal()
     try:
-        if not db.scalar(select(Condition).where(Condition.slug == "nf1")):
-            db.add(
-                Condition(
-                    canonical_name="Neurofibromatosis Type 1",
-                    slug="nf1",
-                    description="NF1 is a genetic condition that can affect nerves, skin, and other systems.",
-                    synonyms=["NF1", "Neurofibromatosis 1", "von Recklinghausen disease"],
-                    rare_disease_flag=True,
-                )
-            )
+        upsert_conditions(db)
 
         for name, source_type, base_url, trust in [
             ("PubMed", "papers", "https://pubmed.ncbi.nlm.nih.gov", 0.96),
@@ -33,4 +51,4 @@ def seed_initial_data() -> None:
 
 if __name__ == "__main__":
     seed_initial_data()
-    print("Seeded NF1 and trusted sources.")
+    print(f"Seeded/updated {len(CONDITIONS)} conditions and trusted sources.")

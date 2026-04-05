@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 import { ApiError, apiDelete, apiPost } from "@/lib/api";
 

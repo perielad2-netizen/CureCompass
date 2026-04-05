@@ -25,6 +25,7 @@ dependencies = [
   "orjson>=3.10.7",
   "python-multipart>=0.0.9",
   "markdown>=3.7",
+  "pypdf>=5.1.0",
 ]
 
 [project.optional-dependencies]

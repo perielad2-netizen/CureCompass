@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -14,6 +15,7 @@ class ResearchUpdateListItem(BaseModel):
     evidence_stage_label: str
     summary: str
     why_it_matters: str
+    recap_locale: Literal["en", "he"] = "en"
     confidence_level: str
     applicability_age_group: str
     bookmarked: bool = False

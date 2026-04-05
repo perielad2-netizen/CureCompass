@@ -103,21 +103,150 @@ For production, run Next behind Nginx (reverse proxy to `127.0.0.1:3000`) and se
 
 Create a database and user, then set `DATABASE_URL` in `backend/.env` (same host/port as your Postgres instance).
 
-## 4. Nginx (sketch)
+## 4. Nginx: one hostname, site + `/api` (HTTP or HTTPS)
 
-- **API**: `proxy_pass http://127.0.0.1:8000;` with paths under `/api` (or dedicated subdomain `api.example.com`).
-- **Frontend**: `proxy_pass http://127.0.0.1:3000;` for the site, or serve `next export` static output if you switch to static export later.
-- Enable TLS with **Let’s Encrypt** (`certbot`).
+Assume the app lives at `/opt/CureCompass` (adjust paths to match your server). Gunicorn listens on `127.0.0.1:8000`, Next on `127.0.0.1:3000`. Nginx terminates port **80/443** and reverse-proxies to both.
 
-## 5. Ongoing updates
+### 4.1 Create the site config
 
 ```bash
-cd /opt/curecompass
+sudo nano /etc/nginx/sites-available/curecompass
+```
+
+Paste (replace `server_name` with your **public IP** or **domain**; use both if you like):
+
+```nginx
+server {
+    listen 80;
+    server_name 45.63.98.209 example.com www.example.com;
+
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+After **Let’s Encrypt**, Certbot usually adds a second `server` block for `listen 443 ssl` and redirects HTTP→HTTPS. Then use **`https://`** in `FRONTEND_URL` and `NEXT_PUBLIC_API_BASE_URL` (see below).
+
+### 4.2 Enable the site and reload Nginx
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/curecompass /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 4.3 Align environment with the public URL (important)
+
+**Backend** — `/opt/CureCompass/backend/.env`:
+
+- `FRONTEND_URL` must be the **origin only** (no path): e.g. `https://example.com` or `http://45.63.98.209`. Used for CORS and links; do **not** append `/he` or `/api`.
+
+**Frontend** — `/opt/CureCompass/frontend/.env.local`:
+
+- `NEXT_PUBLIC_API_BASE_URL` must be the browser-visible API base, e.g. `https://example.com/api` or `http://45.63.98.209/api`.
+
+`NEXT_PUBLIC_*` variables are baked in at **build** time. After changing `.env.local`:
+
+```bash
+cd /opt/CureCompass/frontend
+npm ci   # optional, if dependencies changed
+npm run build
+sudo systemctl restart curecompass-web
+sudo systemctl restart curecompass-api
+```
+
+Backend `.env` is read when Gunicorn starts; after editing it:
+
+```bash
+sudo systemctl restart curecompass-api curecompass-worker curecompass-beat
+```
+
+### 4.4 Firewall (UFW example)
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw status
+```
+
+### 4.5 Smoke test
+
+- Site: `http://YOUR_HOST/` or `https://YOUR_HOST/`
+- API docs (if enabled in production): `http://YOUR_HOST/api/docs`
+
+---
+
+## 5. systemd services (example unit names)
+
+A typical production host runs four units (names may match your install):
+
+| Service | Role |
+|--------|------|
+| `curecompass-api` | Gunicorn + Uvicorn workers on `127.0.0.1:8000` |
+| `curecompass-web` | `next start` on `127.0.0.1:3000` |
+| `curecompass-worker` | Celery worker |
+| `curecompass-beat` | Celery beat |
+
+**Status**
+
+```bash
+sudo systemctl status curecompass-api curecompass-web curecompass-worker curecompass-beat --no-pager
+```
+
+**Restart after config or code deploy**
+
+```bash
+sudo systemctl restart curecompass-api curecompass-web curecompass-worker curecompass-beat
+```
+
+**Logs (if something fails)**
+
+```bash
+sudo journalctl -u curecompass-api -u curecompass-web -n 80 --no-pager
+```
+
+### 5.1 Gunicorn: “Connection in use” on port 8000
+
+If `systemctl restart curecompass-api` logs `Connection in use: ('127.0.0.1', 8000)`, an old Gunicorn (or another process) is still bound to **8000**.
+
+1. Check what holds the port: `sudo ss -tlnp | grep 8000` or `sudo lsof -i :8000`.
+2. Stop the API cleanly: `sudo systemctl stop curecompass-api`, wait a second, then `sudo systemctl start curecompass-api`.
+3. If a stray process remains, kill it (carefully), then start the unit again.
+
+Often a second `systemctl restart curecompass-api` after the old master exits is enough.
+
+---
+
+## 6. Ongoing updates
+
+```bash
+cd /opt/CureCompass
 git pull
 cd backend && source .venv/bin/activate && alembic upgrade head && deactivate
 cd ../frontend && npm ci && npm run build
-# Restart systemd services for API, worker, beat, and Next.
+sudo systemctl restart curecompass-api curecompass-web curecompass-worker curecompass-beat
+sudo nginx -t && sudo systemctl reload nginx   # only if you changed Nginx
 ```
+
+If you only changed **backend** `.env`: restart `curecompass-api` (and worker/beat if they rely on the same vars). If you only changed **frontend** `NEXT_PUBLIC_*`: rebuild + restart `curecompass-web`.
+
+---
 
 ## Optional: Docker on the server
 

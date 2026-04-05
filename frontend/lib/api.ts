@@ -7,6 +7,8 @@ type RequestOptions = {
   body?: unknown;
   /** When false, do not try refresh on 401 (e.g. login/register). Default true. */
   authRetry?: boolean;
+  /** Appended as query string (e.g. { locale: "he" } → ?locale=he). */
+  searchParams?: Record<string, string | undefined>;
 };
 
 export class ApiError extends Error {
@@ -86,16 +88,27 @@ async function handleJsonResponse<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+function buildUrl(path: string, searchParams?: Record<string, string | undefined>): string {
+  const entries = searchParams
+    ? Object.entries(searchParams).filter(([, v]) => v !== undefined && v !== "")
+    : [];
+  if (!entries.length) return path;
+  const q = new URLSearchParams(entries as [string, string][]).toString();
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${q}`;
+}
+
 export async function apiGet<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const authRetry = options.authRetry !== false;
   const token = resolveToken(options.token);
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const url = `${API_BASE_URL}${buildUrl(path, options.searchParams)}`;
 
-  let res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers });
+  let res = await fetch(url, { cache: "no-store", headers });
 
   if (res.status === 401 && authRetry && token && (await tryRefresh())) {
     const t2 = resolveToken();
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    res = await fetch(url, {
       cache: "no-store",
       headers: t2 ? { Authorization: `Bearer ${t2}` } : {},
     });
@@ -124,6 +137,33 @@ export async function apiPost<T>(path: string, options: RequestOptions = {}): Pr
       method: "POST",
       headers: h2,
       body: JSON.stringify(options.body ?? {}),
+    });
+  }
+
+  return handleJsonResponse<T>(res);
+}
+
+/** POST multipart (e.g. file upload). Do not set Content-Type; the browser sets the boundary. */
+export async function apiPostFormData<T>(path: string, formData: FormData, options: RequestOptions = {}): Promise<T> {
+  const authRetry = options.authRetry !== false;
+  const token = resolveToken(options.token);
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401 && authRetry && token && (await tryRefresh())) {
+    const t2 = resolveToken();
+    const h2: Record<string, string> = {};
+    if (t2) h2.Authorization = `Bearer ${t2}`;
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: h2,
+      body: formData,
     });
   }
 

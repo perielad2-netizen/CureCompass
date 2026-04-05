@@ -46,3 +46,6 @@ celerybeat-schedule.*
 # Logs & misc
 *.log
 coverage/
+
+# User-uploaded PDFs (local dev)
+**/data/private_documents/

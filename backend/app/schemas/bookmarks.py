@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -18,3 +19,4 @@ class BookmarkListItem(BaseModel):
     source_url: str
     evidence_stage_label: str
     summary: str
+    recap_locale: Literal["en", "he"] = "en"

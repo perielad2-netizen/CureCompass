@@ -55,7 +55,10 @@ class AIEnrichmentService:
             "You must only summarize research and trusted updates from the provided indexed source text. "
             "Do NOT give personal medical advice. Do NOT recommend starting, stopping, or changing treatment. "
             "Use simple language. Clearly label evidence strength and whether it is available now or still experimental. "
-            "Use the provided taxonomy and output ONLY valid JSON matching the schema."
+            "Use the provided taxonomy and output ONLY valid JSON matching the schema. "
+            "Always include lay_summary_he and why_it_matters_he: the same factual meaning as lay_summary and "
+            "why_it_matters, written in clear modern Hebrew for Israeli patients and families (not literal "
+            "word-for-word translation if that harms clarity). Keep Hebrew concise and neutral."
         )
 
         prompt_input = self._build_input(condition, item)
@@ -98,8 +101,10 @@ class AIEnrichmentService:
                 ResearchItemAI(
                     research_item_id=item.id,
                     lay_summary=out.lay_summary,
+                    lay_summary_he=out.lay_summary_he,
                     clinician_summary=out.clinician_summary,
                     why_it_matters=out.why_it_matters,
+                    why_it_matters_he=out.why_it_matters_he,
                     evidence_stage=evidence_enum,
                     confidence_level=out.confidence_level,
                     hype_risk=out.hype_risk.value,
@@ -109,14 +114,16 @@ class AIEnrichmentService:
                     actionability_score=out.actionability_score,
                     structured_json=payload,
                     model_name=settings.openai_responses_model,
-                    prompt_version="v1_phase4_enrichment",
+                    prompt_version="v1_phase4_enrichment_bilingual",
                 )
             )
             return
 
         row.lay_summary = out.lay_summary
+        row.lay_summary_he = out.lay_summary_he
         row.clinician_summary = out.clinician_summary
         row.why_it_matters = out.why_it_matters
+        row.why_it_matters_he = out.why_it_matters_he
         row.evidence_stage = evidence_enum
         row.confidence_level = out.confidence_level
         row.hype_risk = out.hype_risk.value
@@ -126,7 +133,7 @@ class AIEnrichmentService:
         row.actionability_score = out.actionability_score
         row.structured_json = payload
         row.model_name = settings.openai_responses_model
-        row.prompt_version = "v1_phase4_enrichment"
+        row.prompt_version = "v1_phase4_enrichment_bilingual"
 
     def _embed_text(self, text: str) -> list[float]:
         # Embeddings use the embeddings API (not Responses API). This keeps Phase 4 integration practical.
@@ -159,7 +166,7 @@ class AIEnrichmentService:
         stats = EnrichmentStats(enriched=0, skipped=0, failed=0)
         for item in items:
             existing = self.db.scalar(select(ResearchItemAI).where(ResearchItemAI.research_item_id == item.id))
-            if existing:
+            if existing and (existing.lay_summary_he or "").strip():
                 stats.skipped += 1
                 continue
 

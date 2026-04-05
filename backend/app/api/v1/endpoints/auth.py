@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -25,6 +26,7 @@ from app.schemas.auth import (
     RegisterIn,
     ResetPasswordIn,
     TokenOut,
+    UserLocalePatchIn,
     UserMeOut,
 )
 from app.services.email import send_password_reset_email
@@ -119,4 +121,27 @@ def reset_password(payload: ResetPasswordIn, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserMeOut)
 def me(current_user: User = Depends(get_current_user)):
-    return UserMeOut(id=str(current_user.id), email=current_user.email, is_admin=current_user.is_admin)
+    loc: Literal["en", "he"] = "he" if current_user.preferred_locale == "he" else "en"
+    return UserMeOut(
+        id=str(current_user.id),
+        email=current_user.email,
+        is_admin=current_user.is_admin,
+        preferred_locale=loc,
+    )
+
+
+@router.patch("/me", response_model=UserMeOut)
+def patch_me(
+    payload: UserLocalePatchIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.preferred_locale = payload.preferred_locale
+    db.commit()
+    db.refresh(current_user)
+    return UserMeOut(
+        id=str(current_user.id),
+        email=current_user.email,
+        is_admin=current_user.is_admin,
+        preferred_locale=payload.preferred_locale,
+    )

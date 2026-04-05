@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Text, cast, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_optional_user
@@ -57,7 +57,27 @@ def list_conditions(db: Session = Depends(get_db)):
 
 @router.get("/search")
 def search_conditions(q: str, db: Session = Depends(get_db)):
-    conditions = db.scalars(select(Condition).where(Condition.canonical_name.ilike(f"%{q}%")).limit(20)).all()
+    """Match canonical name, URL slug, description, or any synonym (JSON list)."""
+    raw = (q or "").strip()
+    if not raw:
+        return []
+    escaped = raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    syn_blob = cast(Condition.synonyms, Text)
+    stmt = (
+        select(Condition)
+        .where(
+            or_(
+                Condition.canonical_name.ilike(pattern, escape="\\"),
+                Condition.slug.ilike(pattern, escape="\\"),
+                Condition.description.ilike(pattern, escape="\\"),
+                syn_blob.ilike(pattern, escape="\\"),
+            )
+        )
+        .order_by(Condition.canonical_name.asc())
+        .limit(50)
+    )
+    conditions = db.scalars(stmt).all()
     return [{"id": str(c.id), "canonical_name": c.canonical_name, "slug": c.slug} for c in conditions]
 
 

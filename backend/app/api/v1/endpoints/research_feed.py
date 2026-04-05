@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -52,6 +53,7 @@ def list_condition_updates(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     item_type: str | None = Query(None, description="Filter by item_type e.g. paper, trial, regulatory"),
+    locale: Literal["en", "he"] = Query(default="en", description="UI locale for Hebrew recaps when stored"),
 ):
     condition = db.scalar(select(Condition).where(Condition.slug == slug))
     if not condition:
@@ -81,7 +83,7 @@ def list_condition_updates(
     out: list[ResearchUpdateListItem] = []
     for item in items:
         src = db.get(Source, item.source_id)
-        core = serialize_research_item(db, item)
+        core = serialize_research_item(db, item, locale=locale)
         out.append(
             ResearchUpdateListItem(
                 source_name=src.name if src else "Source",
@@ -98,6 +100,7 @@ def get_update_detail(
     item_id: str,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
+    locale: Literal["en", "he"] = Query(default="en"),
 ):
     try:
         parsed = UUID(item_id)
@@ -109,7 +112,7 @@ def get_update_detail(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Update not found")
 
     src = db.get(Source, item.source_id)
-    core = serialize_research_item(db, item)
+    core = serialize_research_item(db, item, locale=locale)
     bookmarked = False
     if current_user:
         bookmarked = (

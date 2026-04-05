@@ -27,6 +27,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    preferred_locale: Mapped[str] = mapped_column(String(10), default="en", index=True)
     notification_defaults_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -96,8 +97,10 @@ class ResearchItemAI(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     research_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("research_items.id", ondelete="CASCADE"), unique=True)
     lay_summary: Mapped[str] = mapped_column(Text, default="")
+    lay_summary_he: Mapped[str] = mapped_column(Text, default="")
     clinician_summary: Mapped[str] = mapped_column(Text, default="")
     why_it_matters: Mapped[str] = mapped_column(Text, default="")
+    why_it_matters_he: Mapped[str] = mapped_column(Text, default="")
     evidence_stage: Mapped[EvidenceStage] = mapped_column(Enum(EvidenceStage), default=EvidenceStage.BASIC_RESEARCH, index=True)
     confidence_level: Mapped[str] = mapped_column(String(32), default="low")
     hype_risk: Mapped[str] = mapped_column(String(64), default="hypothesis_generating_only")
@@ -193,6 +196,27 @@ class AskAIMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class UserPrivateDocument(Base):
+    """User-uploaded PDF (MVP) linked to a followed condition. Text stored for Ask AI context; file on disk."""
+
+    __tablename__ = "user_private_documents"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    condition_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conditions.id", ondelete="CASCADE"), index=True)
+    original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    stored_filename: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    processing_status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    patient_summary: Mapped[str] = mapped_column(Text, default="")
+    doctor_questions_json: Mapped[list] = mapped_column(JSON, default=list)
+    processing_error: Mapped[str] = mapped_column(Text, default="")
+    consent_recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Bookmark(Base):
     __tablename__ = "bookmarks"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -218,3 +242,4 @@ Index("ix_trials_condition_status_phase", Trial.condition_id, Trial.status, Tria
 Index("ix_follow_unique", UserFollowedCondition.user_id, UserFollowedCondition.condition_id, unique=True)
 Index("ix_bookmark_unique", Bookmark.user_id, Bookmark.research_item_id, unique=True)
 Index("ix_notification_pref_user_condition", NotificationPreference.user_id, NotificationPreference.condition_id, unique=True)
+Index("ix_user_private_documents_user_condition", UserPrivateDocument.user_id, UserPrivateDocument.condition_id)
