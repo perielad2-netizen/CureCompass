@@ -135,13 +135,51 @@ def _password_reset_email_html(reset_url: str) -> str:
 </html>"""
 
 
-def _digest_email_html(title: str, body_markdown: str) -> str:
+def _normalize_digest_email_locale(locale: str | None) -> str:
+    return "he" if (locale or "").lower() == "he" else "en"
+
+
+def _digest_email_html(title: str, body_markdown: str, *, locale: str = "en") -> str:
     """HTML wrapper matching CureCompass UI (navy #0b213f, teal #2cb6af, calm layout)."""
+    loc = _normalize_digest_email_locale(locale)
     inner = _markdown_to_html_fragment(body_markdown)
     title_esc = html.escape(title, quote=False)
     logo_src = _email_logo_img_src_attr()
+    html_lang = "he" if loc == "he" else "en"
+    html_dir = "rtl" if loc == "he" else "ltr"
+    content_dir_attr = f' dir="{html_dir}"' if loc == "he" else ""
 
-    auto_row = """
+    if loc == "he":
+        badge = "CureCompass · תדרוך מחקר"
+        badge_p_style = (
+            "margin:0;font-size:11px;letter-spacing:0.06em;color:rgba(255,255,255,0.9);"
+            "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;"
+        )
+        auto_row = """
+          <tr>
+            <td style="padding:16px 26px 0;border-top:1px solid #e2e8f0;">
+              <p style="margin:0;font-size:12px;line-height:1.55;color:#64748b;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
+                <strong style="color:#475569;">אנא אל תשיבו למייל זה.</strong>
+                ההודעה נשלחה אוטומטית ותיבת הדואר אינה נבדקת.
+                לשאלות השתמשו באפליקציה או פנו לצוות המטפל שלכם.
+              </p>
+            </td>
+          </tr>"""
+        disclaimer_row = """
+          <tr>
+            <td style="padding:18px 26px 26px;">
+              <p style="margin:0;font-size:11px;line-height:1.5;color:#94a3b8;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
+                סיכום מחקרי לצורכי הסברה בלבד — אינו מהווה ייעוץ רפואי אישי. התייעצו עם רופא/ה או אחראי טיפול.
+              </p>
+            </td>
+          </tr>"""
+    else:
+        badge = "CureCompass · Research briefing"
+        badge_p_style = (
+            "margin:0;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;"
+            "color:rgba(255,255,255,0.9);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;"
+        )
+        auto_row = """
           <tr>
             <td style="padding:16px 26px 0;border-top:1px solid #e2e8f0;">
               <p style="margin:0;font-size:12px;line-height:1.55;color:#64748b;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
@@ -151,8 +189,7 @@ def _digest_email_html(title: str, body_markdown: str) -> str:
               </p>
             </td>
           </tr>"""
-
-    disclaimer_row = """
+        disclaimer_row = """
           <tr>
             <td style="padding:18px 26px 26px;">
               <p style="margin:0;font-size:11px;line-height:1.5;color:#94a3b8;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
@@ -162,7 +199,7 @@ def _digest_email_html(title: str, body_markdown: str) -> str:
           </tr>"""
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="{html_lang}" dir="{html_dir}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -211,8 +248,8 @@ def _digest_email_html(title: str, body_markdown: str) -> str:
           </tr>
           <tr>
             <td style="background-color:#2cb6af;padding:20px 26px 18px;">
-              <p style="margin:0;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.9);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
-                CureCompass · Research briefing
+              <p style="{badge_p_style}">
+                {html.escape(badge, quote=False)}
               </p>
               <p style="margin:10px 0 0;font-size:20px;font-weight:600;line-height:1.35;color:#ffffff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
                 {title_esc}
@@ -220,7 +257,7 @@ def _digest_email_html(title: str, body_markdown: str) -> str:
             </td>
           </tr>
           <tr>
-            <td class="digest-content" style="padding:24px 26px 10px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
+            <td class="digest-content" style="padding:24px 26px 10px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;"{content_dir_attr}>
               {inner}
             </td>
           </tr>{auto_row}{disclaimer_row}
@@ -318,20 +355,35 @@ def send_password_reset_email(to_email: str, reset_url: str) -> None:
             logger.warning("Dev fallback — reset link: %s", reset_url)
 
 
-def send_digest_email(to_email: str, subject: str, body_text: str) -> bool:
+def send_digest_email(
+    to_email: str,
+    subject: str,
+    body_text: str,
+    *,
+    locale: str = "en",
+) -> bool:
     """Send digest as multipart (plain + HTML). Returns True if handed to SMTP, False if not configured."""
     if not settings.smtp_host:
         logger.warning("SMTP not configured; digest for %s — subject=%s", to_email, subject)
         return False
 
-    text = (
-        f"{body_text}\n\n"
-        "---\n"
-        "Please do not reply — this message is automated and this inbox is not monitored.\n\n"
-        "Educational research summary only — not personal medical advice. Discuss with your clinician."
-    )
+    loc = _normalize_digest_email_locale(locale)
+    if loc == "he":
+        text = (
+            f"{body_text}\n\n"
+            "---\n"
+            "אנא אל תשיבו למייל זה — ההודעה אוטומטית ותיבת הדואר אינה נבדקת.\n\n"
+            "סיכום מחקרי לצורכי הסברה בלבד — אינו מהווה ייעוץ רפואי אישי. התייעצו עם רופא/ה או אחראי טיפול."
+        )
+    else:
+        text = (
+            f"{body_text}\n\n"
+            "---\n"
+            "Please do not reply — this message is automated and this inbox is not monitored.\n\n"
+            "Educational research summary only — not personal medical advice. Discuss with your clinician."
+        )
 
-    html_body = _digest_email_html(subject, body_text)
+    html_body = _digest_email_html(subject, body_text, locale=loc)
     logo_bytes = _read_brand_logo_bytes()
 
     if logo_bytes:

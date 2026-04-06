@@ -72,27 +72,57 @@ def _is_major_item(ai: ResearchItemAI | None) -> bool:
     )
 
 
-def _markdown_from_digest(out: ConditionDigestOut) -> str:
+def _user_digest_locale(user: User) -> str:
+    return "he" if (user.preferred_locale or "").lower() == "he" else "en"
+
+
+def _digest_type_label_he(digest_type: str) -> str:
+    return {"daily": "יומי", "weekly": "שבועי", "major": "מהותי"}.get(digest_type, digest_type)
+
+
+def _markdown_from_digest(out: ConditionDigestOut, locale: str) -> str:
+    if locale == "he":
+        highlights = "### עיקרי העדכונים"
+        uncertain = "### מה עדיין לא ברור"
+        src = "מקור"
+        changed = "מה השתנה"
+        matters = "למה זה חשוב"
+        strength = "חוזק הראיות"
+        still_unc = "לא ברור עדיין"
+        footer = (
+            "_סיכום מחקרי לצורכי הסברה בלבד — אינו מהווה ייעוץ רפואי אישי. "
+            "התייעצו עם רופא/ה או אחראי טיפול._"
+        )
+    else:
+        highlights = "### Highlights"
+        uncertain = "### What is still uncertain"
+        src = "Source"
+        changed = "What changed"
+        matters = "Why it matters"
+        strength = "Evidence strength"
+        still_unc = "Still uncertain"
+        footer = (
+            "_Educational research summary only — not personal medical advice. Discuss with your clinician._"
+        )
+
     lines: list[str] = [f"## {out.headline}", "", out.overview.strip(), ""]
     if out.items:
-        lines.append("### Highlights")
+        lines.append(highlights)
         lines.append("")
         for i, it in enumerate(out.items, start=1):
             lines.extend(
                 [
                     f"**{i}. {it.title}**",
-                    f"- Source: {it.source_url}",
-                    f"- What changed: {it.what_changed}",
-                    f"- Why it matters: {it.why_it_matters}",
-                    f"- Evidence strength: {it.evidence_strength}",
-                    f"- Still uncertain: {it.uncertainty_note}",
+                    f"- {src}: {it.source_url}",
+                    f"- {changed}: {it.what_changed}",
+                    f"- {matters}: {it.why_it_matters}",
+                    f"- {strength}: {it.evidence_strength}",
+                    f"- {still_unc}: {it.uncertainty_note}",
                     "",
                 ]
             )
-    lines.extend(["### What is still uncertain", "", out.what_still_uncertain.strip(), ""])
-    lines.append(
-        "_Educational research summary only — not personal medical advice. Discuss with your clinician._"
-    )
+    lines.extend([uncertain, "", out.what_still_uncertain.strip(), ""])
+    lines.append(footer)
     return "\n".join(lines)
 
 
@@ -156,7 +186,14 @@ class DigestService:
                 break
         return out
 
-    def _call_openai(self, condition: Condition, digest_type: str, items: list[ResearchItem]) -> ConditionDigestOut:
+    def _call_openai(
+        self,
+        condition: Condition,
+        digest_type: str,
+        items: list[ResearchItem],
+        *,
+        locale: str,
+    ) -> ConditionDigestOut:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
 
@@ -179,15 +216,24 @@ class DigestService:
             )
         bundle = "\n\n---\n\n".join(lines) if lines else "(No new indexed items in this window.)"
 
+        lang_block = (
+            "Write every human-readable string value in the JSON in Hebrew: modern, plain language for patients and "
+            "families. Keep URLs exactly as given in the source items (source_url field). "
+            "Do not translate URLs. Condition name may stay as provided if no good Hebrew clinical name is certain."
+            if locale == "he"
+            else ""
+        )
         system = (
             "You are CureCompass digest writer for patients and caregivers. "
             "Summarize only the provided trusted research items for the named condition. "
             "Use simple language. Do not give personal medical advice or treatment changes. "
             "If there are no items, still write a calm overview explaining no major indexed updates in the period. "
-            "Output ONLY JSON matching the schema."
+            "Output ONLY JSON matching the schema. JSON keys must stay in English as in the schema."
+            + (f" {lang_block}" if lang_block else "")
         )
         user = (
             f"Digest type: {digest_type}\n"
+            f"Output language: {'Hebrew' if locale == 'he' else 'English'}\n"
             f"Condition: {condition.canonical_name}\n\n"
             f"Items:\n{bundle}"
         )
@@ -243,17 +289,26 @@ class DigestService:
         window_days = WINDOW_DAYS[digest_type]
         window_start = datetime.now(tz=timezone.utc) - timedelta(days=window_days)
         items = self._gather_items(condition.id, window_start, pref, digest_type)
+        loc = _user_digest_locale(user)
 
         try:
-            parsed = self._call_openai(condition, digest_type, items)
+            parsed = self._call_openai(condition, digest_type, items, locale=loc)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Digest AI failed user=%s condition=%s: %s", user.id, condition.slug, exc)
-            title = f"{condition.canonical_name} — {digest_type.title()} digest (draft)"
-            body = (
-                "## Digest temporarily unavailable\n\n"
-                "We could not generate an AI summary right now. "
-                "Please try again later or view latest updates on your dashboard.\n"
-            )
+            if loc == "he":
+                title = f"{condition.canonical_name} — סיכום {_digest_type_label_he(digest_type)} (טיוטה)"
+                body = (
+                    "## סיכום זמנית לא זמין\n\n"
+                    "לא הצלחנו לייצר כרגע סיכום באמצעות ה־AI. "
+                    "ניתן לנסות שוב מאוחר יותר או לעיין בעדכונים האחרונים בלוח הבקרה.\n"
+                )
+            else:
+                title = f"{condition.canonical_name} — {digest_type.title()} digest (draft)"
+                body = (
+                    "## Digest temporarily unavailable\n\n"
+                    "We could not generate an AI summary right now. "
+                    "Please try again later or view latest updates on your dashboard.\n"
+                )
             row = Digest(
                 user_id=user.id,
                 condition_id=condition.id,
@@ -266,14 +321,14 @@ class DigestService:
             self.db.flush()
             if pref.email_enabled:
                 try:
-                    if send_digest_email(user.email, title, body):
+                    if send_digest_email(user.email, title, body, locale=loc):
                         row.delivered_at = datetime.now(tz=timezone.utc)
                 except (OSError, smtplib.SMTPException):
                     logger.exception("Digest email failed after AI error path")
             return row
 
         title = parsed.headline[:255]
-        body = _markdown_from_digest(parsed)
+        body = _markdown_from_digest(parsed, loc)
         payload = parsed.model_dump()
 
         row = Digest(
@@ -289,7 +344,7 @@ class DigestService:
 
         if pref.email_enabled:
             try:
-                if send_digest_email(user.email, title, body):
+                if send_digest_email(user.email, title, body, locale=loc):
                     row.delivered_at = datetime.now(tz=timezone.utc)
             except (OSError, smtplib.SMTPException):
                 logger.exception("Digest email failed user=%s", user.id)

@@ -85,8 +85,9 @@ def email_digest(
     if not row or row.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digest not found")
 
+    email_loc = "he" if (current_user.preferred_locale or "").lower() == "he" else "en"
     try:
-        ok = send_digest_email(current_user.email, row.title, row.body_markdown)
+        ok = send_digest_email(current_user.email, row.title, row.body_markdown, locale=email_loc)
     except smtplib.SMTPAuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -211,4 +211,50 @@ CONDITIONS: list[ConditionSeed] = [
         ],
         "rare_disease_flag": True,
     },
+    {
+        "slug": "oculodentodigital-dysplasia",
+        "canonical_name": "Oculodentodigital dysplasia",
+        "description": (
+            "Oculodentodigital dysplasia (ODDD) is a rare disorder primarily caused by pathogenic "
+            "variants in GJA1, affecting gap junction function. Features can include microphthalmia "
+            "or other ocular anomalies, dental abnormalities (e.g., small or missing teeth), and "
+            "syndactyly or other digital findings. Neurologic involvement occurs in some individuals. "
+            "Care is multidisciplinary and individualized."
+        ),
+        "synonyms": [
+            "ODDD",
+            "oddd",
+            "oculodentodigital dysplasia",
+            "oculo-dento-digital dysplasia",
+            "oculodentodigital syndrome",
+            "ODD syndrome",
+            "GJA1-related disorder",
+            "GAP junction disease oculodentodigital",
+        ],
+        "rare_disease_flag": True,
+    },
+    {
+        "slug": "neuromyelitis-optica-spectrum",
+        "canonical_name": "Neuromyelitis optica spectrum disorder",
+        "description": (
+            "Neuromyelitis optica spectrum disorder (NMOSD) is an autoimmune inflammatory disorder "
+            "of the central nervous system that typically targets the optic nerves and spinal cord, "
+            "often associated with aquaporin-4 (AQP4) or, in some cases, myelin oligodendrocyte "
+            "glycoprotein (MOG) antibodies. It is distinct from multiple sclerosis and requires "
+            "specialized diagnosis and long-term management to reduce relapses and disability."
+        ),
+        "synonyms": [
+            "NMOSD",
+            "neuromyelitis optica spectrum",
+            "neuromyelitis optica",
+            "NMO",
+            "Devic disease",
+            "Devic's disease",
+            "AQP4-IgG NMOSD",
+            "aquaporin-4 NMOSD",
+            "AQP4 antibody positive NMO",
+            "NMO spectrum disorder",
+        ],
+        "rare_disease_flag": True,
+    },
 ]
