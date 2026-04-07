@@ -78,7 +78,7 @@ export default function DashboardPage() {
   return (
     <main className="container-page py-8">
       <h1 className="text-2xl font-semibold text-slate-900">{t("title")}</h1>
-      <p className="mt-1 text-sm text-slate-600">
+      <div className="mt-1 text-sm text-slate-600">
         {data?.digest_preview ? (
           locale === "he" ? (
             (() => {
@@ -91,7 +91,7 @@ export default function DashboardPage() {
                 return kind === "has_updates" ? text : t("digestPreviewHasUpdates");
               }
               return (
-                <>
+                <div>
                   <span>{t("digestPreviewBriefingTeaser")}</span>
                   <details className="mt-2 text-xs text-slate-500">
                     <summary className="cursor-pointer select-none text-slate-600">{t("digestPreviewShowEnglishHeadline")}</summary>
@@ -101,7 +101,7 @@ export default function DashboardPage() {
                       </LtrIsland>
                     </div>
                   </details>
-                </>
+                </div>
               );
             })()
           ) : (
@@ -110,7 +110,7 @@ export default function DashboardPage() {
         ) : (
           t("loadingFeed")
         )}
-      </p>
+      </div>
       <Link href="/digests" className="mt-2 inline-block text-sm font-medium text-primary">
         {t("openBriefings")}
       </Link>

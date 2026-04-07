@@ -34,6 +34,13 @@ from app.services.email import send_password_reset_email
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _is_effective_admin(user: User) -> bool:
+    owner = (settings.admin_owner_email or "").strip().lower()
+    if owner and (user.email or "").strip().lower() == owner:
+        return True
+    return bool(user.is_admin)
+
+
 @router.post("/register", response_model=TokenOut)
 def register(payload: RegisterIn, db: Session = Depends(get_db)):
     existing = db.scalar(select(User).where(User.email == payload.email))
@@ -125,7 +132,7 @@ def me(current_user: User = Depends(get_current_user)):
     return UserMeOut(
         id=str(current_user.id),
         email=current_user.email,
-        is_admin=current_user.is_admin,
+        is_admin=_is_effective_admin(current_user),
         preferred_locale=loc,
     )
 
@@ -142,6 +149,6 @@ def patch_me(
     return UserMeOut(
         id=str(current_user.id),
         email=current_user.email,
-        is_admin=current_user.is_admin,
+        is_admin=_is_effective_admin(current_user),
         preferred_locale=payload.preferred_locale,
     )

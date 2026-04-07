@@ -27,10 +27,54 @@ type SourceRow = {
   enabled: boolean;
 };
 
+type ReportTotals = {
+  users_total: number;
+  admins_total: number;
+  users_created_30d: number;
+  users_locale_he: number;
+  users_locale_en: number;
+  users_with_follows: number;
+  follows_total: number;
+  users_with_email_briefings_enabled: number;
+  users_with_in_app_briefings_enabled: number;
+  digests_total: number;
+  digests_delivered_total: number;
+  digest_users_total: number;
+  ask_ai_messages_total: number;
+  ask_ai_conversations_total: number;
+  ask_ai_users_total: number;
+  private_docs_total: number;
+  private_docs_processed: number;
+};
+
+type ReportUser = {
+  user_id: string;
+  email: string;
+  preferred_locale: string;
+  created_at: string;
+  followed_conditions: number;
+  ask_ai_messages: number;
+  ask_ai_conversations: number;
+  digests_created: number;
+  digests_delivered: number;
+  has_email_briefings_enabled: boolean;
+  has_in_app_briefings_enabled: boolean;
+  last_ai_message_at: string | null;
+  last_digest_at: string | null;
+};
+
+type Reports = {
+  generated_at: string;
+  totals: ReportTotals;
+  top_ai_users: ReportUser[];
+  recent_users: ReportUser[];
+};
+
 export default function AdminPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [jobs, setJobs] = useState<JobRow[] | null>(null);
   const [sources, setSources] = useState<SourceRow[] | null>(null);
+  const [reports, setReports] = useState<Reports | null>(null);
   const [error, setError] = useState("");
   const [sourceSaving, setSourceSaving] = useState<string | null>(null);
   const [backfillSlug, setBackfillSlug] = useState("");
@@ -51,12 +95,17 @@ export default function AdminPage() {
           setError("You do not have admin access.");
           return null;
         }
-        return Promise.all([apiGet<JobRow[]>("/admin/jobs"), apiGet<SourceRow[]>("/admin/sources")]);
+        return Promise.all([
+          apiGet<JobRow[]>("/admin/jobs"),
+          apiGet<SourceRow[]>("/admin/sources"),
+          apiGet<Reports>("/admin/reports"),
+        ]);
       })
       .then((pair) => {
         if (!pair) return;
         setJobs(pair[0]);
         setSources(pair[1]);
+        setReports(pair[2]);
       })
       .catch((e) => {
         if (e instanceof ApiError) setError(e.message);
@@ -95,6 +144,113 @@ export default function AdminPage() {
       </Link>
 
       {error && me?.is_admin ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
+
+      <section className="mt-10 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Owner reports</h2>
+        {!reports ? (
+          <p className="mt-2 text-sm text-slate-600">Loading report metrics…</p>
+        ) : (
+          <>
+            <p className="mt-1 text-xs text-slate-500">Generated: {formatDateTimeMedium(reports.generated_at)}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Registered users</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.users_total}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">New users (30d)</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.users_created_30d}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Users with AI usage</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.ask_ai_users_total}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">AI messages total</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.ask_ai_messages_total}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Digest users</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.digest_users_total}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Digests sent</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.digests_delivered_total}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Email briefings enabled</p>
+                <p className="text-xl font-semibold text-slate-900">
+                  {reports.totals.users_with_email_briefings_enabled}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Private docs processed</p>
+                <p className="text-xl font-semibold text-slate-900">{reports.totals.private_docs_processed}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Top AI users (email)</th>
+                    <th className="px-3 py-2">AI msgs</th>
+                    <th className="px-3 py-2">AI convos</th>
+                    <th className="px-3 py-2">Digests</th>
+                    <th className="px-3 py-2">Delivered</th>
+                    <th className="px-3 py-2">Locale</th>
+                    <th className="px-3 py-2">Last AI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.top_ai_users.map((u) => (
+                    <tr key={u.user_id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 font-medium text-slate-900">{u.email}</td>
+                      <td className="px-3 py-2">{u.ask_ai_messages}</td>
+                      <td className="px-3 py-2">{u.ask_ai_conversations}</td>
+                      <td className="px-3 py-2">{u.digests_created}</td>
+                      <td className="px-3 py-2">{u.digests_delivered}</td>
+                      <td className="px-3 py-2">{u.preferred_locale}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {u.last_ai_message_at ? formatDateTimeMedium(u.last_ai_message_at) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Recent users</th>
+                    <th className="px-3 py-2">Created</th>
+                    <th className="px-3 py-2">Follows</th>
+                    <th className="px-3 py-2">Email briefings</th>
+                    <th className="px-3 py-2">In-app briefings</th>
+                    <th className="px-3 py-2">AI msgs</th>
+                    <th className="px-3 py-2">Digests</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.recent_users.map((u) => (
+                    <tr key={u.user_id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 font-medium text-slate-900">{u.email}</td>
+                      <td className="px-3 py-2 text-slate-600">{formatDateTimeMedium(u.created_at)}</td>
+                      <td className="px-3 py-2">{u.followed_conditions}</td>
+                      <td className="px-3 py-2">{u.has_email_briefings_enabled ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2">{u.has_in_app_briefings_enabled ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2">{u.ask_ai_messages}</td>
+                      <td className="px-3 py-2">{u.digests_created}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
 
       <section className="mt-10 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Run ingestion backfill</h2>

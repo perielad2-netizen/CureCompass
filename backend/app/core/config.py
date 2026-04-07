@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "noreply@curecompass.app"
+    # If set, admin reports endpoint is restricted to this exact admin email.
+    admin_owner_email: str = ""
     # If set, Reply-To on password-reset mail (optional).
     smtp_reply_to: str = ""
     # Reply-To for research-briefing email only. If empty, falls back to smtp_reply_to.

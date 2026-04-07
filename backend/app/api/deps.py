@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2Pas
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.entities import User
 
@@ -29,6 +30,20 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 
 def get_admin_user(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
+
+
+def get_owner_admin_user(user: User = Depends(get_current_user)) -> User:
+    owner = (settings.admin_owner_email or "").strip().lower()
+    email = (user.email or "").strip().lower()
+    # If an owner email is configured, that account is the sole admin gate.
+    if owner:
+        if email != owner:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner-only admin access required")
+        return user
+    # Fallback for environments that have no configured owner email.
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
