@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { UpdateCard } from "@/components/condition/update-card";
 import { LtrIsland } from "@/components/ui/ltr-island";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData } from "@/lib/api";
@@ -75,6 +75,7 @@ export default function ConditionPage() {
   const apiEnglish = locale === "he";
   const answerLtr = locale !== "he";
   const params = useParams();
+  const searchParams = useSearchParams();
   const slug = typeof params.slug === "string" ? params.slug : params.slug?.[0] ?? "";
   const [tab, setTab] = useState<TabId>("updates");
   const [data, setData] = useState<ConditionDetail | null>(null);
@@ -143,6 +144,13 @@ export default function ConditionPage() {
     if (tab !== "ask") return;
     void loadPrivateDocs();
   }, [tab, loadPrivateDocs]);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "updates" || tabParam === "trials" || tabParam === "ask" || tabParam === "more") {
+      setTab(tabParam);
+    }
+  }, [searchParams]);
 
   const AnswerBody = ({ children }: { children: ReactNode }) =>
     answerLtr ? <LtrIsland>{children}</LtrIsland> : <>{children}</>;

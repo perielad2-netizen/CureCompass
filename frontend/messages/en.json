@@ -7,6 +7,7 @@
     "dashboard": "Dashboard",
     "briefings": "Research briefings",
     "briefingsTitle": "Plain-language summaries of your followed conditions",
+    "askAi": "Ask AI",
     "saved": "Saved",
     "admin": "Admin",
     "profile": "Profile",
@@ -15,6 +16,15 @@
     "createAccount": "Create account",
     "signIn": "Sign in",
     "loading": "Loading…"
+  },
+  "AskHub": {
+    "title": "Ask AI",
+    "intro": "Pick a followed condition to open the Ask AI tab.",
+    "loading": "Loading conditions…",
+    "loadError": "Could not load your followed conditions.",
+    "noConditions": "You are not following any conditions yet.",
+    "followCondition": "Follow a condition",
+    "openAsk": "Open Ask AI →"
   },
   "Home": {
     "kicker": "Condition-focused research intelligence",

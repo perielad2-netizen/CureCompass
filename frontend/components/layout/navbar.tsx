@@ -65,6 +65,9 @@ export function Navbar() {
           <Link href="/digests" className="rounded-md px-3 py-2 transition-colors hover:bg-ice/80 hover:text-navy" title={t("briefingsTitle")}>
             {t("briefings")}
           </Link>
+          <Link href="/ask" className="rounded-md px-3 py-2 transition-colors hover:bg-ice/80 hover:text-navy">
+            {t("askAi")}
+          </Link>
           {!checked ? (
             <span className="px-3 py-2 text-slate-400" aria-busy="true">
               {t("loading")}
