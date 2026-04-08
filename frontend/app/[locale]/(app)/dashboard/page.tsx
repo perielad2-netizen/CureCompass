@@ -160,9 +160,18 @@ export default function DashboardPage() {
                           result?: unknown;
                           error?: string;
                           enrichment_scheduled?: boolean;
+                          cooldown_hours?: number;
                         }>("/ingestion/backfill", { body: { condition_slug: scanSlug } });
                         if (out.status === "failed") {
                           setScanError(typeof out.error === "string" ? out.error : t("scanFail"));
+                        } else if (out.status === "skipped_recent") {
+                          setScanNotice(
+                            t("scanSkippedRecent", { hours: out.cooldown_hours ?? 4 })
+                          );
+                          const next = await apiGet<DashboardPayload>("/dashboard", {
+                            searchParams: { locale },
+                          });
+                          setData(next);
                         } else {
                           let tail =
                             out.status === "queued" ? t("scanQueued") : t("scanDone");

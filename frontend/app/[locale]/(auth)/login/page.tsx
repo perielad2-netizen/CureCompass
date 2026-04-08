@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useLayoutEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { notifyAuthChanged } from "@/lib/auth-events";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
@@ -10,6 +11,8 @@ type MeLocale = { preferred_locale: "en" | "he" };
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useTranslations("AuthLogin");
+  const tc = useTranslations("Common");
   const [guestForm, setGuestForm] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +52,7 @@ export default function LoginPage() {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError("Login failed. Check your credentials.");
+        setError(t("loginFailedGeneric"));
       }
     }
   }
@@ -57,7 +60,7 @@ export default function LoginPage() {
   if (guestForm === null) {
     return (
       <main className="container-page py-10">
-        <p className="text-slate-600">Loading…</p>
+        <p className="text-slate-600">{tc("loading")}</p>
       </main>
     );
   }
@@ -65,7 +68,7 @@ export default function LoginPage() {
   if (guestForm === false) {
     return (
       <main className="container-page py-10">
-        <p className="text-slate-600">Redirecting…</p>
+        <p className="text-slate-600">{tc("redirecting")}</p>
       </main>
     );
   }
@@ -73,35 +76,35 @@ export default function LoginPage() {
   return (
     <main className="container-page py-10">
       <section className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-calm">
-        <h1 className="text-2xl font-semibold">Welcome back</h1>
-        <p className="mt-1 text-sm text-slate-600">Sign in to continue following condition updates.</p>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
+        <p className="mt-1 text-sm text-slate-600">{t("subtitle")}</p>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <input
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Email"
+            placeholder={t("emailPlaceholder")}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Password"
+            placeholder={t("passwordPlaceholder")}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <button className="w-full rounded-lg bg-primary px-4 py-2 text-white">Login</button>
+          <button className="w-full rounded-lg bg-primary px-4 py-2 text-white">{t("loginButton")}</button>
         </form>
         <p className="mt-2 text-center text-sm">
           <Link href="/forgot-password" className="font-medium text-primary">
-            Forgot password?
+            {t("forgotPassword")}
           </Link>
         </p>
         <p className="mt-4 text-center text-sm text-slate-600">
-          New to CureCompass?{" "}
+          {t("newTo")}{" "}
           <Link href="/register" className="font-medium text-primary">
-            Create account
+            {t("createAccount")}
           </Link>
         </p>
       </section>

@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.entities import Condition, NotificationPreference, User, UserFollowedCondition
+from app.schemas.condition_request import ConditionRequestIn, ConditionRequestOut
 from app.schemas.conditions import FollowConditionIn
 from app.schemas.notifications import NotificationPreferencePayload
+from app.services.condition_resolve import (
+    condition_to_brief,
+    create_condition_from_ai,
+    find_existing_condition,
+    resolve_with_openai,
+)
 
 router = APIRouter(prefix="/conditions", tags=["conditions"])
 
@@ -79,6 +86,50 @@ def search_conditions(q: str, db: Session = Depends(get_db)):
     )
     conditions = db.scalars(stmt).all()
     return [{"id": str(c.id), "canonical_name": c.canonical_name, "slug": c.slug} for c in conditions]
+
+
+@router.post("/request", response_model=ConditionRequestOut)
+def request_condition(
+    payload: ConditionRequestIn,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    """Match an existing condition or resolve the name with OpenAI and create a catalog row."""
+    raw = payload.query
+    existing = find_existing_condition(db, raw)
+    if existing:
+        return ConditionRequestOut(outcome="existing", condition=condition_to_brief(existing))
+
+    try:
+        ai = resolve_with_openai(raw, payload.locale)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Condition lookup failed. Try again in a moment.",
+        ) from exc
+
+    if not ai.is_medical_condition:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not recognize a specific medical condition from that text. Try a standard disease name or ask your clinician.",
+        )
+
+    try:
+        row, inserted = create_condition_from_ai(db, raw, ai)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if inserted:
+        db.commit()
+    else:
+        db.rollback()
+
+    return ConditionRequestOut(
+        outcome="created" if inserted else "existing",
+        condition=condition_to_brief(row),
+    )
 
 
 @router.get("/by-slug/{slug}")

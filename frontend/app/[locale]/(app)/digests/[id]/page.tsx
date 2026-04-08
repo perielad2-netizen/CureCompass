@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -24,6 +25,8 @@ function digestGenerationFailed(structured: Record<string, unknown> | undefined)
 }
 
 export default function DigestDetailPage() {
+  const t = useTranslations("DigestDetail");
+  const tList = useTranslations("Digests");
   const params = useParams();
   const router = useRouter();
   const id = typeof params.id === "string" ? params.id : params.id?.[0] ?? "";
@@ -39,17 +42,17 @@ export default function DigestDetailPage() {
     apiGet<DigestDetail>(`/digests/${encodeURIComponent(id)}`)
       .then(setData)
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 404) setError("Briefing not found.");
-        else setError("Could not load briefing.");
+        if (err instanceof ApiError && err.status === 404) setError(t("notFound"));
+        else setError(t("loadError"));
       });
-  }, [id]);
+  }, [id, t]);
 
   if (error) {
     return (
       <main className="container-page py-8">
         <p className="text-rose-600">{error}</p>
         <Link href="/digests" className="mt-4 inline-block text-primary">
-          Back to research briefings
+          {t("backToList")}
         </Link>
       </main>
     );
@@ -58,7 +61,7 @@ export default function DigestDetailPage() {
   if (!data) {
     return (
       <main className="container-page py-8">
-        <p className="text-slate-600">{id ? "Loading…" : "Missing briefing."}</p>
+        <p className="text-slate-600">{id ? t("loading") : t("missingId")}</p>
       </main>
     );
   }
@@ -67,21 +70,23 @@ export default function DigestDetailPage() {
   const rawErr = failed ? String(data.structured_json.error) : "";
   const errDetail = rawErr.length > 280 ? `${rawErr.slice(0, 280)}…` : rawErr;
 
+  const typeLabel =
+    data.digest_type === "daily"
+      ? t("dailyStyle")
+      : data.digest_type === "weekly"
+        ? t("weeklyStyle")
+        : data.digest_type === "major"
+          ? tList("typeLabelMajor")
+          : data.digest_type;
+
   return (
     <main className="container-page max-w-3xl py-8">
       <Link href="/digests" className="text-sm font-medium text-primary">
-        ← All research briefings
+        {t("allBriefings")}
       </Link>
       <p className="mt-4 text-xs font-medium uppercase tracking-wide text-slate-500">
-        {data.digest_type === "daily"
-          ? "Daily-style"
-          : data.digest_type === "weekly"
-            ? "Weekly-style"
-            : data.digest_type === "major"
-              ? "Major milestones"
-              : data.digest_type}{" "}
-        · {data.condition_name}
-        {data.email_delivered ? " · Sent by email" : ""}
+        {typeLabel} · {data.condition_name}
+        {data.email_delivered ? t("sentByEmail") : ""}
       </p>
       <h1 className="mt-2 text-2xl font-semibold text-slate-900">{data.title}</h1>
       <time className="mt-2 block text-sm text-slate-500" dateTime={data.created_at}>
@@ -90,7 +95,7 @@ export default function DigestDetailPage() {
       <div className="mt-3 flex flex-wrap items-center gap-4">
         {data.condition_slug ? (
           <Link className="text-sm text-primary" href={`/conditions/${data.condition_slug}`}>
-            Open condition
+            {t("openCondition")}
           </Link>
         ) : null}
         <button
@@ -102,24 +107,24 @@ export default function DigestDetailPage() {
             setEmailMsg("");
             try {
               await apiPost<{ sent: boolean }>(`/digests/${encodeURIComponent(id)}/email`, { body: {} });
-              setEmailMsg("Sent — check your inbox.");
+              setEmailMsg(t("emailSentToast"));
               setData((d) => (d ? { ...d, email_delivered: true } : d));
             } catch (e) {
               if (e instanceof ApiError) setEmailMsg(e.message);
-              else setEmailMsg("Could not send email.");
+              else setEmailMsg(t("emailSendFailed"));
             } finally {
               setEmailBusy(false);
             }
           }}
         >
-          {emailBusy ? "Sending…" : "Email this briefing to me"}
+          {emailBusy ? t("sending") : t("emailButton")}
         </button>
         <button
           type="button"
           className="text-sm font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
           disabled={deleteBusy}
           onClick={async () => {
-            if (!confirm("Delete this research briefing? This cannot be undone.")) return;
+            if (!confirm(t("deleteConfirm"))) return;
             setDeleteBusy(true);
             setDeleteErr("");
             try {
@@ -127,18 +132,18 @@ export default function DigestDetailPage() {
               router.push("/digests");
             } catch (e) {
               if (e instanceof ApiError) setDeleteErr(e.message);
-              else setDeleteErr("Could not delete.");
+              else setDeleteErr(t("deleteFailed"));
             } finally {
               setDeleteBusy(false);
             }
           }}
         >
-          {deleteBusy ? "Deleting…" : "Delete briefing"}
+          {deleteBusy ? t("deleting") : t("deleteButton")}
         </button>
       </div>
       {emailMsg ? (
         <p
-          className={`mt-2 text-sm ${emailMsg.startsWith("Sent") ? "text-emerald-700" : "text-rose-600"}`}
+          className={`mt-2 text-sm ${emailMsg === t("emailSentToast") ? "text-emerald-700" : "text-rose-600"}`}
         >
           {emailMsg}
         </p>
@@ -149,26 +154,28 @@ export default function DigestDetailPage() {
         {failed ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              <p className="font-semibold">This briefing didn&apos;t finish generating</p>
+              <p className="font-semibold">{t("generationFailedTitle")}</p>
               <p className="mt-2 text-amber-900/90">
-                The server couldn&apos;t produce the AI summary when this was created (for example missing or invalid
-                OpenAI settings, a timeout, or a temporary API error). Your indexed updates on the{" "}
-                <Link href="/dashboard" className="font-medium underline">
-                  dashboard
-                </Link>{" "}
-                are unchanged.
+                {t.rich("generationFailedBody", {
+                  dashboard: (chunks) => (
+                    <Link href="/dashboard" className="font-medium underline">
+                      {chunks}
+                    </Link>
+                  ),
+                })}
               </p>
               <p className="mt-3">
                 <Link href="/digests" className="font-medium text-primary">
-                  Create a new research briefing
+                  {t("createNewBriefing")}
                 </Link>{" "}
-                from the list page after confirming <code className="rounded bg-amber-100/80 px-1">OPENAI_API_KEY</code>{" "}
-                is set and the API has been restarted.
+                {t.rich("generationFailedAfterKey", {
+                  code: (chunks) => <code className="rounded bg-amber-100/80 px-1">{chunks}</code>,
+                })}
               </p>
             </div>
             {errDetail ? (
               <p className="text-xs text-slate-500">
-                <span className="font-medium text-slate-600">Detail: </span>
+                <span className="font-medium text-slate-600">{t("detailLabel")} </span>
                 <span className="font-mono">{errDetail}</span>
               </p>
             ) : null}
@@ -179,9 +186,7 @@ export default function DigestDetailPage() {
           </div>
         )}
       </article>
-      <p className="mt-6 text-xs text-slate-500">
-        Educational research summaries only — not personal medical advice. Discuss with your clinician.
-      </p>
+      <p className="mt-6 text-xs text-slate-500">{t("footerDisclaimer")}</p>
     </main>
   );
 }

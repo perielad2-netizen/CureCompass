@@ -49,6 +49,14 @@ def get_owner_admin_user(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def user_is_effective_admin(user: User) -> bool:
+    """Matches /auth/me: owner email from settings, else DB is_admin."""
+    owner = (settings.admin_owner_email or "").strip().lower()
+    if owner and (user.email or "").strip().lower() == owner:
+        return True
+    return bool(user.is_admin)
+
+
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer),
     db: Session = Depends(get_db),

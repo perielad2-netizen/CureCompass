@@ -33,6 +33,7 @@ class AdminKpiTotalsOut(BaseModel):
     users_created_30d: int
     users_locale_he: int
     users_locale_en: int
+    conditions_total: int
     users_with_follows: int
     follows_total: int
     users_with_email_briefings_enabled: int

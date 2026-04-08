@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from app.api.deps import get_current_user
+from app.core.config import settings
+
+from app.api.deps import get_current_user, user_is_effective_admin
 from app.db.session import get_db
 from app.models.entities import AdminJobRun, Condition, User, UserFollowedCondition
 from app.schemas.ingestion import BackfillIn
+from app.services.ingestion_cooldown import should_skip_ingestion_for_user
 from app.tasks.ingestion import run_for_condition
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
@@ -31,6 +34,18 @@ def backfill(
         )
         if not followed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Follow this condition to backfill")
+
+    skip, last_at = should_skip_ingestion_for_user(
+        db, condition.id, is_admin=user_is_effective_admin(current_user)
+    )
+    if skip and last_at is not None:
+        return {
+            "status": "skipped_recent",
+            "condition_slug": payload.condition_slug,
+            "last_ingestion_at": last_at.isoformat(),
+            "cooldown_hours": settings.ingestion_cooldown_hours,
+            "enrichment_scheduled": False,
+        }
 
     # In development, Celery runs tasks eagerly (in-process).
     # In production, a Celery worker + Redis will execute this in the background.

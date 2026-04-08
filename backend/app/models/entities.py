@@ -225,6 +225,16 @@ class Bookmark(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class ConditionIngestionCooldown(Base):
+    """Last successful ingestion time per condition (shared across users)."""
+
+    __tablename__ = "condition_ingestion_cooldown"
+    condition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conditions.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_success_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AdminJobRun(Base):
     __tablename__ = "admin_job_runs"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

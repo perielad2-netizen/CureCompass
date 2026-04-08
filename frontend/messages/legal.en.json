@@ -124,5 +124,16 @@
     "s12p1": "support@curecompass.app",
     "seeDisclaimer": "Medical disclaimer",
     "seePrivacy": "Privacy Policy"
+  },
+  "LegalDisclaimer": {
+    "metaTitle": "Medical disclaimer",
+    "metaDescription": "Educational use only — not personal medical advice.",
+    "backHome": "← Home",
+    "h1": "Medical disclaimer",
+    "lastUpdated": "Last updated for CureCompass v1 (placeholder date — replace before production).",
+    "p1": "CureCompass provides <strong>general educational information</strong> about medical research, clinical trials, and regulatory news related to conditions you choose to follow. It does not provide medical diagnosis, treatment recommendations, or emergency guidance.",
+    "p2": "Content is synthesized from public sources and AI-assisted summaries. It may be incomplete, outdated, or not applicable to your situation. <strong>Always consult a qualified healthcare professional</strong> for decisions about diagnosis, medications, procedures, or any change to your care.",
+    "p3": "Do not use CureCompass in place of professional advice or delay seeking care because of something you read here. If you think you may have a medical emergency, contact emergency services immediately.",
+    "p4": "By using CureCompass, you agree that the service is provided \"as is\" for informational purposes only and that we are not liable for actions taken based on the content."
   }
 }

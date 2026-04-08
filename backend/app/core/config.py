@@ -52,5 +52,8 @@ class Settings(BaseSettings):
     private_document_max_bytes: int = 5_242_880  # 5 MiB
     private_document_max_extracted_chars: int = 200_000
 
+    # Skip re-running external ingestion for the same condition if a run succeeded recently (non-admin users).
+    ingestion_cooldown_hours: int = 4
+
 
 settings = Settings()

@@ -115,7 +115,13 @@ def ask_ai(
 
     if mode in ("research_only", "research_and_documents"):
         retrieval = RetrievalService(db)
-        research_docs = retrieval.retrieve_for_condition(condition_id=condition.id, query=payload.prompt, limit=5)
+        research_docs = retrieval.retrieve_for_condition(
+            condition_id=condition.id,
+            query=payload.prompt,
+            limit=5,
+            age_scope=follow.age_scope,
+            geography=follow.geography,
+        )
 
     if mode in ("documents_only", "research_and_documents"):
         private_rows = _load_private_documents(
@@ -173,6 +179,21 @@ def ask_ai(
         else "Write every user-facing string in the JSON response in clear English suitable for patients and families."
     )
 
+    _focus_rules = {
+        "pediatric": "This user is focused on pediatric (child/adolescent) context — prioritize evidence that applies to children and teens, not adult-only studies, unless the question clearly requires broader context.",
+        "adult": "This user is focused on adult context — prioritize evidence that applies to adults; deprioritize pediatric-only work unless it is essential to the question.",
+        "both": "This user asked for both pediatric and adult relevance where applicable — balance evidence across ages when the question is broad.",
+    }
+    _ak = (follow.age_scope or "both").strip().lower()
+    audience_text = _focus_rules.get(_ak, _focus_rules["both"])
+    geo = (follow.geography or "").strip()
+    geo_note = (
+        f" Geographic interest: {geo}. When trials or sites list countries, slightly prefer evidence with activity in that region when choosing what to emphasize."
+        if geo and geo.lower() not in ("global", "worldwide", "")
+        else ""
+    )
+    audience_rule = f"{audience_text}{geo_note}"
+
     if mode == "research_only":
         scope_rule = (
             "Answer only about the selected condition and only from the TRUSTED_INDEXED_EVIDENCE block below. "
@@ -203,9 +224,10 @@ def ask_ai(
             parts.append("USER_UPLOADED_DOCUMENTS:\n" + private_text)
         user_blocks = parts
 
-    system = f"You are CureCompass Ask AI. {scope_rule} {lang_rule}"
+    system = f"You are CureCompass Ask AI. {scope_rule} {audience_rule} {lang_rule}"
     user = (
         f"Condition: {condition.canonical_name}\n"
+        f"Follow preferences — age scope: {follow.age_scope}; region note: {geo or 'global'}.\n"
         f"User question: {payload.prompt}\n\n"
         + "\n\n".join(user_blocks)
         + "\n\nUse only the IDs provided in the evidence blocks in the sources list."

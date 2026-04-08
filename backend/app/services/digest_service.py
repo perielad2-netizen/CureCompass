@@ -20,8 +20,14 @@ from app.models.entities import (
     NotificationPreference,
     ResearchItem,
     ResearchItemAI,
+    Trial,
     User,
     UserFollowedCondition,
+)
+from app.services.follow_relevance import (
+    combined_personalization_multiplier,
+    countries_for_item,
+    infer_item_audience,
 )
 from app.schemas.condition_digest import ConditionDigestOut
 from app.services.email import send_digest_email
@@ -57,6 +63,47 @@ def _allowed_item_types(pref: NotificationPreference) -> list[str]:
     if pref.notify_foundation_news and "paper" not in types:
         types.append("paper")
     return types if types else ["paper", "trial", "regulatory"]
+
+
+def _sort_items_for_follow(
+    db: Session,
+    items: list[ResearchItem],
+    age_scope: str,
+    geography: str,
+) -> list[ResearchItem]:
+    """Re-rank digest candidates using the same personalization signals as Ask AI retrieval."""
+    if not items:
+        return items
+    us = (age_scope or "both").strip().lower()
+    geo = (geography or "global").strip()
+    if us == "both" and geo.lower() in ("", "global", "worldwide"):
+        return items
+
+    ids = [i.id for i in items]
+    ais = {
+        r.research_item_id: r
+        for r in db.scalars(select(ResearchItemAI).where(ResearchItemAI.research_item_id.in_(ids))).all()
+    }
+    trials = list(db.scalars(select(Trial).where(Trial.research_item_id.in_(ids))).all())
+    trial_by = {t.research_item_id: t for t in trials if t.research_item_id}
+
+    scored: list[tuple[float, float, ResearchItem]] = []
+    for item in items:
+        ai = ais.get(item.id)
+        tr = trial_by.get(item.id)
+        aud = infer_item_audience(item, ai, tr)
+        cc = countries_for_item(item, tr)
+        mult = combined_personalization_multiplier(
+            user_age_scope=age_scope,
+            user_geography=geography,
+            item_audience=aud,
+            countries=cc,
+        )
+        ts = item.published_at.timestamp() if item.published_at else 0.0
+        scored.append((mult, ts, item))
+
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return [t[2] for t in scored]
 
 
 def _is_major_item(ai: ResearchItemAI | None) -> bool:
@@ -159,6 +206,9 @@ class DigestService:
         window_start: datetime,
         pref: NotificationPreference,
         digest_type: str,
+        *,
+        age_scope: str = "both",
+        geography: str = "global",
     ) -> list[ResearchItem]:
         types = _allowed_item_types(pref)
         apply_major = digest_type == "major" or pref.notify_major_only
@@ -171,9 +221,10 @@ class DigestService:
                 ResearchItem.item_type.in_(types),
             )
             .order_by(ResearchItem.published_at.desc())
-            .limit(40)
+            .limit(80)
         )
         items = list(self.db.scalars(q).all())
+        items = _sort_items_for_follow(self.db, items, age_scope, geography)
         if not apply_major:
             return items[:20]
 
@@ -193,6 +244,8 @@ class DigestService:
         items: list[ResearchItem],
         *,
         locale: str,
+        age_scope: str = "both",
+        geography: str = "global",
     ) -> ConditionDigestOut:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
@@ -234,6 +287,9 @@ class DigestService:
         user = (
             f"Digest type: {digest_type}\n"
             f"Output language: {'Hebrew' if locale == 'he' else 'English'}\n"
+            f"Reader focus — age_scope: {age_scope}; region preference: {geography or 'global'}\n"
+            "When summarizing, prioritize studies and trials that match this age focus (e.g. pediatric vs adult cohorts) "
+            "and, when relevant, geographic availability. De-emphasize or briefly flag clearly mismatched items rather than giving them equal weight.\n"
             f"Condition: {condition.canonical_name}\n\n"
             f"Items:\n{bundle}"
         )
@@ -288,11 +344,33 @@ class DigestService:
 
         window_days = WINDOW_DAYS[digest_type]
         window_start = datetime.now(tz=timezone.utc) - timedelta(days=window_days)
-        items = self._gather_items(condition.id, window_start, pref, digest_type)
+        follow = self.db.scalar(
+            select(UserFollowedCondition).where(
+                UserFollowedCondition.user_id == user.id,
+                UserFollowedCondition.condition_id == condition.id,
+            )
+        )
+        age_scope = follow.age_scope if follow else "both"
+        geography = follow.geography if follow else "global"
+        items = self._gather_items(
+            condition.id,
+            window_start,
+            pref,
+            digest_type,
+            age_scope=age_scope,
+            geography=geography,
+        )
         loc = _user_digest_locale(user)
 
         try:
-            parsed = self._call_openai(condition, digest_type, items, locale=loc)
+            parsed = self._call_openai(
+                condition,
+                digest_type,
+                items,
+                locale=loc,
+                age_scope=age_scope,
+                geography=geography,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Digest AI failed user=%s condition=%s: %s", user.id, condition.slug, exc)
             if loc == "he":

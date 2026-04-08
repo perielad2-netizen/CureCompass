@@ -8,6 +8,7 @@ from app.models.entities import AdminJobRun, Condition
 from app.services.adapters.clinicaltrials import ClinicalTrialsAdapter
 from app.services.adapters.openfda import OpenFDAAdapter
 from app.services.adapters.pubmed import PubMedAdapter
+from app.services.ingestion_cooldown import touch_ingestion_success
 from app.services.ingestion_service import IngestionService
 from app.services.post_ingest_enrichment import schedule_enrichment_after_ingest
 from app.workers.celery_app import celery_app
@@ -45,6 +46,8 @@ def run_for_condition(condition_slug: str) -> dict:
             payload["enrichment_scheduled"] = False
         job.output_json = payload
         job.finished_at = datetime.now(tz=timezone.utc)
+        db.commit()
+        touch_ingestion_success(db, cond.id)
         db.commit()
         return {
             "status": "completed",

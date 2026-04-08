@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { ApiError, apiGet, apiPut } from "@/lib/api";
 
@@ -47,6 +49,8 @@ function rowToPayload(row: Defaults): Defaults {
 
 export default function NotificationSettingsPage() {
   const router = useRouter();
+  const t = useTranslations("NotificationsSettings");
+  const tc = useTranslations("Common");
   const [data, setData] = useState<NotificationSettingsResponse | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -65,8 +69,8 @@ export default function NotificationSettingsPage() {
         setData(r);
         setForm(r.defaults);
       })
-      .catch(() => setError("Could not load settings."));
-  }, [router]);
+      .catch(() => setError(t("loadError")));
+  }, [router, t]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -77,18 +81,14 @@ export default function NotificationSettingsPage() {
       await apiPut("/notification-settings", {
         body: { ...form, apply_to_followed_conditions: applyToFollowed },
       });
-      setSaved(
-        applyToFollowed
-          ? "Saved defaults and applied them to all conditions you follow."
-          : "Saved defaults for new follows only. Use the checkbox to push these settings to conditions you already follow, or edit each condition below."
-      );
+      setSaved(applyToFollowed ? t("savedAppliedAll") : t("savedNewOnly"));
       setApplyToFollowed(false);
       const r = await apiGet<NotificationSettingsResponse>("/notification-settings");
       setData(r);
       setForm(r.defaults);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-      else setError("Save failed.");
+      else setError(tc("saveFailed"));
     }
   }
 
@@ -100,12 +100,12 @@ export default function NotificationSettingsPage() {
       await apiPut(`/conditions/by-slug/${encodeURIComponent(slug)}/notification-settings`, {
         body: rowToPayload(row),
       });
-      setPerRowMsg((m) => ({ ...m, [slug]: "Saved." }));
+      setPerRowMsg((m) => ({ ...m, [slug]: t("saved") }));
       const r = await apiGet<NotificationSettingsResponse>("/notification-settings");
       setData(r);
       if (form) setForm(r.defaults);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Save failed.";
+      const msg = err instanceof ApiError ? err.message : tc("saveFailed");
       setPerRowMsg((m) => ({ ...m, [slug]: msg }));
     } finally {
       setPerRowBusy(null);
@@ -125,61 +125,60 @@ export default function NotificationSettingsPage() {
   if (!form) {
     return (
       <main className="container-page max-w-2xl py-10">
-        {error ? <p className="text-rose-600">{error}</p> : <p className="text-slate-600">Loading…</p>}
+        {error ? <p className="text-rose-600">{error}</p> : <p className="text-slate-600">{t("loading")}</p>}
       </main>
     );
   }
 
+  const emStrong = (chunks: ReactNode) => <strong className="font-medium text-slate-800">{chunks}</strong>;
+
   return (
     <main className="container-page max-w-2xl py-10">
-      <h1 className="text-2xl font-semibold text-slate-900">Research briefings &amp; notifications</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">{t("title")}</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Scheduled <strong className="font-medium text-slate-800">research briefings</strong> are generated automatically
-        when the server runs its digest jobs. If <strong className="font-medium text-slate-800">email</strong> is on and
-        the server has SMTP configured, we send that briefing to your account email—so{" "}
-        <strong className="font-medium text-slate-800">daily</strong> can mean roughly one email per day{" "}
-        <em>per followed condition</em> (when there is content to summarize). Choose{" "}
-        <strong className="font-medium text-slate-800">weekly</strong> for a lighter schedule,{" "}
-        <strong className="font-medium text-slate-800">off</strong> to stop automatic briefings (you can still create
-        briefings manually from the Research briefings page), or turn off email only to keep in-app briefings.
+        {t.rich("intro", {
+          researchBriefings: emStrong,
+          email: emStrong,
+          daily: emStrong,
+          weekly: emStrong,
+          off: emStrong,
+          em: (chunks) => <em>{chunks}</em>,
+        })}
       </p>
       <Link href="/profile" className="mt-4 inline-block text-sm text-primary">
-        ← Profile
+        {t("linkProfile")}
       </Link>
       <Link href="/digests" className="mt-4 ml-4 inline-block text-sm text-primary">
-        Research briefings
+        {t("linkBriefings")}
       </Link>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-calm">
-        <h2 className="text-base font-semibold text-slate-900">Default preferences</h2>
-        <p className="text-xs text-slate-500">
-          Defaults are used when you follow a new condition. Existing follows keep their own settings until you apply
-          defaults below or edit each condition.
-        </p>
+        <h2 className="text-base font-semibold text-slate-900">{t("defaultsTitle")}</h2>
+        <p className="text-xs text-slate-500">{t("defaultsHint")}</p>
 
         <div>
-          <label className="text-sm font-medium text-slate-800">Research briefing schedule</label>
+          <label className="text-sm font-medium text-slate-800">{t("scheduleLabel")}</label>
           <select
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             value={form.frequency}
             onChange={(e) => setForm({ ...form, frequency: e.target.value })}
           >
-            <option value="real_time">Real time (major / in-app when available; not a daily email digest)</option>
-            <option value="daily">Daily (scheduled briefing; email too if email is on)</option>
-            <option value="weekly">Weekly (scheduled briefing; email too if email is on)</option>
-            <option value="off">Off (no scheduled automatic briefings)</option>
+            <option value="real_time">{t("freqRealtime")}</option>
+            <option value="daily">{t("freqDaily")}</option>
+            <option value="weekly">{t("freqWeekly")}</option>
+            <option value="off">{t("freqOff")}</option>
           </select>
         </div>
 
         <fieldset className="space-y-2 border-t border-slate-100 pt-4">
-          <legend className="text-sm font-medium text-slate-800">What to include</legend>
+          <legend className="text-sm font-medium text-slate-800">{t("whatToInclude")}</legend>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={form.notify_trials}
               onChange={(e) => setForm({ ...form, notify_trials: e.target.checked })}
             />
-            Trials
+            {t("trials")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -187,7 +186,7 @@ export default function NotificationSettingsPage() {
               checked={form.notify_recruiting_trials_only}
               onChange={(e) => setForm({ ...form, notify_recruiting_trials_only: e.target.checked })}
             />
-            Recruiting trials only
+            {t("recruitingOnly")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -195,7 +194,7 @@ export default function NotificationSettingsPage() {
               checked={form.notify_papers}
               onChange={(e) => setForm({ ...form, notify_papers: e.target.checked })}
             />
-            Papers
+            {t("papers")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -203,7 +202,7 @@ export default function NotificationSettingsPage() {
               checked={form.notify_regulatory}
               onChange={(e) => setForm({ ...form, notify_regulatory: e.target.checked })}
             />
-            Regulatory
+            {t("regulatory")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -211,7 +210,7 @@ export default function NotificationSettingsPage() {
               checked={form.notify_foundation_news}
               onChange={(e) => setForm({ ...form, notify_foundation_news: e.target.checked })}
             />
-            Foundation / news
+            {t("foundationNews")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -219,19 +218,19 @@ export default function NotificationSettingsPage() {
               checked={form.notify_major_only}
               onChange={(e) => setForm({ ...form, notify_major_only: e.target.checked })}
             />
-            Major updates only
+            {t("majorOnly")}
           </label>
         </fieldset>
 
         <fieldset className="space-y-2 border-t border-slate-100 pt-4">
-          <legend className="text-sm font-medium text-slate-800">Channels</legend>
+          <legend className="text-sm font-medium text-slate-800">{t("channels")}</legend>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={form.in_app_enabled}
               onChange={(e) => setForm({ ...form, in_app_enabled: e.target.checked })}
             />
-            In-app briefings
+            {t("inAppBriefings")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -239,7 +238,7 @@ export default function NotificationSettingsPage() {
               checked={form.email_enabled}
               onChange={(e) => setForm({ ...form, email_enabled: e.target.checked })}
             />
-            Email briefings (requires SMTP on the server)
+            {t("emailBriefings")}
           </label>
         </fieldset>
 
@@ -250,25 +249,20 @@ export default function NotificationSettingsPage() {
             checked={applyToFollowed}
             onChange={(e) => setApplyToFollowed(e.target.checked)}
           />
-          <span>
-            Also apply these defaults to <strong className="font-medium text-slate-800">every condition I already follow</strong>{" "}
-            (overwrites per-condition settings with the choices above).
-          </span>
+          <span>{t.rich("applyAllLabel", { strong: (chunks) => <strong className="font-medium text-slate-800">{chunks}</strong> })}</span>
         </label>
 
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
         {saved ? <p className="text-sm text-emerald-700">{saved}</p> : null}
         <button type="submit" className="rounded-lg bg-primary px-5 py-2 text-white">
-          Save defaults
+          {t("saveDefaults")}
         </button>
       </form>
 
       {data?.per_condition?.length ? (
         <section className="mt-10">
-          <h2 className="text-lg font-semibold text-slate-900">Per condition</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Adjust schedule or email for one condition without changing your global defaults.
-          </p>
+          <h2 className="text-lg font-semibold text-slate-900">{t("perConditionTitle")}</h2>
+          <p className="mt-1 text-sm text-slate-600">{t("perConditionIntro")}</p>
           <ul className="mt-4 space-y-4">
             {data.per_condition.map((p) => (
               <li key={p.condition_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-calm">
@@ -276,17 +270,17 @@ export default function NotificationSettingsPage() {
                 <div className="text-xs text-slate-500">{p.slug}</div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="text-slate-600">Briefing schedule</span>
+                    <span className="text-slate-600">{t("briefingSchedule")}</span>
                     <select
                       className="rounded-lg border border-slate-300 px-3 py-2"
                       value={p.frequency}
                       onChange={(e) => updatePerRow(p.slug, { frequency: e.target.value })}
                       disabled={perRowBusy === p.slug}
                     >
-                      <option value="real_time">Real time</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="off">Off</option>
+                      <option value="real_time">{t("freqRealtimeShort")}</option>
+                      <option value="daily">{t("freqDailyShort")}</option>
+                      <option value="weekly">{t("freqWeeklyShort")}</option>
+                      <option value="off">{t("freqOffShort")}</option>
                     </select>
                   </label>
                   <div className="flex flex-col justify-end gap-2 text-sm">
@@ -297,7 +291,7 @@ export default function NotificationSettingsPage() {
                         onChange={(e) => updatePerRow(p.slug, { email_enabled: e.target.checked })}
                         disabled={perRowBusy === p.slug}
                       />
-                      Email
+                      {t("email")}
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -306,7 +300,7 @@ export default function NotificationSettingsPage() {
                         onChange={(e) => updatePerRow(p.slug, { in_app_enabled: e.target.checked })}
                         disabled={perRowBusy === p.slug}
                       />
-                      In-app
+                      {t("inApp")}
                     </label>
                   </div>
                 </div>
@@ -317,14 +311,14 @@ export default function NotificationSettingsPage() {
                     disabled={perRowBusy === p.slug}
                     onClick={() => savePerCondition(p.slug, p)}
                   >
-                    {perRowBusy === p.slug ? "Saving…" : "Save this condition"}
+                    {perRowBusy === p.slug ? t("saving") : t("saveCondition")}
                   </button>
                   <Link href={`/conditions/${encodeURIComponent(p.slug)}`} className="text-sm text-primary">
-                    Open condition page
+                    {t("openConditionPage")}
                   </Link>
                   {perRowMsg[p.slug] ? (
                     <span
-                      className={`text-sm ${perRowMsg[p.slug] === "Saved." ? "text-emerald-700" : "text-rose-600"}`}
+                      className={`text-sm ${perRowMsg[p.slug] === t("saved") ? "text-emerald-700" : "text-rose-600"}`}
                     >
                       {perRowMsg[p.slug]}
                     </span>

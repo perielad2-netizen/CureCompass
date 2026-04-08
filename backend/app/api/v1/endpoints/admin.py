@@ -11,6 +11,7 @@ from app.models.entities import (
     AdminJobRun,
     AskAIConversation,
     AskAIMessage,
+    Condition,
     Digest,
     NotificationPreference,
     Source,
@@ -109,6 +110,8 @@ def get_admin_reports(
     users_created_30d = db.scalar(select(func.count()).select_from(User).where(User.created_at >= cutoff_30d)) or 0
     users_locale_he = db.scalar(select(func.count()).select_from(User).where(User.preferred_locale == "he")) or 0
     users_locale_en = db.scalar(select(func.count()).select_from(User).where(User.preferred_locale != "he")) or 0
+
+    conditions_total = db.scalar(select(func.count()).select_from(Condition)) or 0
 
     follows_total = db.scalar(select(func.count()).select_from(UserFollowedCondition)) or 0
     users_with_follows = (
@@ -258,6 +261,7 @@ def get_admin_reports(
             users_created_30d=int(users_created_30d),
             users_locale_he=int(users_locale_he),
             users_locale_en=int(users_locale_en),
+            conditions_total=int(conditions_total),
             users_with_follows=int(users_with_follows),
             follows_total=int(follows_total),
             users_with_email_briefings_enabled=int(users_with_email_briefings_enabled),

@@ -29,6 +29,8 @@ type UpdateDetail = {
 
 export default function UpdateDetailPage() {
   const locale = useLocale();
+  const t = useTranslations("UpdateDetail");
+  const tc = useTranslations("Common");
   const tCard = useTranslations("UpdateCard");
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : params.id?.[0] ?? "";
@@ -40,17 +42,17 @@ export default function UpdateDetailPage() {
     apiGet<UpdateDetail>(`/updates/${encodeURIComponent(id)}`, { searchParams: { locale } })
       .then(setData)
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 404) setError("This update was not found.");
-        else setError("Could not load this update.");
+        if (err instanceof ApiError && err.status === 404) setError(t("notFound"));
+        else setError(t("loadError"));
       });
-  }, [id, locale]);
+  }, [id, locale, t]);
 
   if (error) {
     return (
       <main className="container-page py-8">
         <p className="text-rose-600">{error}</p>
         <Link href="/dashboard" className="mt-4 inline-block text-primary">
-          Back to dashboard
+          {tc("backToDashboard")}
         </Link>
       </main>
     );
@@ -59,7 +61,7 @@ export default function UpdateDetailPage() {
   if (!data) {
     return (
       <main className="container-page py-8">
-        <p className="text-slate-600">{id ? "Loading…" : "Missing update."}</p>
+        <p className="text-slate-600">{id ? t("loading") : t("missingId")}</p>
       </main>
     );
   }
@@ -87,11 +89,17 @@ export default function UpdateDetailPage() {
             <Badge>{data.evidence_stage_label}</Badge>
           </LtrIsland>
         )}
-        <span>Confidence: {data.confidence_level}</span>
-        <span>Applies to: {data.applicability_age_group}</span>
+        <span>
+          {t("confidence")} {data.confidence_level}
+        </span>
+        <span>
+          {t("appliesTo")} {data.applicability_age_group}
+        </span>
         <time dateTime={data.published_at}>{new Date(data.published_at).toLocaleDateString()}</time>
       </div>
-      <p className="mt-2 text-xs text-slate-500">Hype / risk note: {data.hype_risk.replace(/_/g, " ")}</p>
+      <p className="mt-2 text-xs text-slate-500">
+        {t("hypeRisk")} {data.hype_risk.replace(/_/g, " ")}
+      </p>
       {rtlRecap ? (
         <p className="mt-6 text-sm text-slate-600">{data.summary}</p>
       ) : (
@@ -104,7 +112,7 @@ export default function UpdateDetailPage() {
         {rtlRecap ? <span>{data.why_it_matters}</span> : <LtrInline>{data.why_it_matters}</LtrInline>}
       </p>
       <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">From the source</h2>
+        <h2 className="text-sm font-semibold text-slate-900">{t("fromSource")}</h2>
         <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-sans text-sm text-slate-700">
           {data.abstract_or_body}
         </pre>
@@ -116,15 +124,13 @@ export default function UpdateDetailPage() {
           rel="noreferrer"
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
         >
-          Open original source
+          {t("openOriginal")}
         </a>
         <Link href="/dashboard" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800">
-          Dashboard
+          {tc("dashboard")}
         </Link>
       </div>
-      <p className="mt-8 text-xs text-slate-500">
-        Educational research information only. Not personal medical advice. Discuss questions with your clinician.
-      </p>
+      <p className="mt-8 text-xs text-slate-500">{t("footerDisclaimer")}</p>
     </main>
   );
 }

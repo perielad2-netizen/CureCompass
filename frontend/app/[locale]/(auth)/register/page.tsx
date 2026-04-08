@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useLayoutEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { notifyAuthChanged } from "@/lib/auth-events";
 import { ApiError, apiPost } from "@/lib/api";
@@ -8,6 +9,8 @@ import { redirectAuthenticatedUser } from "@/lib/redirect-if-authed";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const t = useTranslations("AuthRegister");
+  const tc = useTranslations("Common");
   /** null = undecided (SSR / first paint), true = show sign-up form, false = signed in → redirect */
   const [guestForm, setGuestForm] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
@@ -39,7 +42,7 @@ export default function RegisterPage() {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError("Sign up failed. Try again.");
+        setError(t("signUpFailedGeneric"));
       }
     }
   }
@@ -47,7 +50,7 @@ export default function RegisterPage() {
   if (guestForm === null) {
     return (
       <main className="container-page py-10">
-        <p className="text-slate-600">Loading…</p>
+        <p className="text-slate-600">{tc("loading")}</p>
       </main>
     );
   }
@@ -55,7 +58,7 @@ export default function RegisterPage() {
   if (guestForm === false) {
     return (
       <main className="container-page py-10">
-        <p className="text-slate-600">Redirecting…</p>
+        <p className="text-slate-600">{tc("redirecting")}</p>
       </main>
     );
   }
@@ -63,12 +66,12 @@ export default function RegisterPage() {
   return (
     <main className="container-page py-10">
       <section className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-calm">
-        <h1 className="text-2xl font-semibold">Create your CureCompass account</h1>
-        <p className="mt-1 text-sm text-slate-600">Start with one condition (NF1 is preloaded).</p>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
+        <p className="mt-1 text-sm text-slate-600">{t("subtitle")}</p>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <input
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Email"
+            placeholder={t("emailPlaceholder")}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -76,22 +79,22 @@ export default function RegisterPage() {
           <div>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              placeholder="Password"
+              placeholder={t("passwordPlaceholder")}
               type="password"
               minLength={6}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <p className="mt-1 text-xs text-slate-500">At least 6 characters.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("passwordHint")}</p>
           </div>
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <button className="w-full rounded-lg bg-primary px-4 py-2 text-white">Sign up</button>
+          <button className="w-full rounded-lg bg-primary px-4 py-2 text-white">{t("signUpButton")}</button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-600">
-          Already have an account?{" "}
+          {t("alreadyHave")}{" "}
           <Link href="/login" className="font-medium text-primary">
-            Sign in
+            {t("signIn")}
           </Link>
         </p>
       </section>
