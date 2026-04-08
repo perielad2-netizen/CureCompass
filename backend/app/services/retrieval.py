@@ -43,8 +43,8 @@ class RetrievalService:
     ) -> list[dict[str, Any]]:
         """Semantic search over research_items for one condition.
 
-        Only items whose ``Source.trust_score >= 0.8`` are considered (seeded PubMed / ClinicalTrials.gov / openFDA
-        are ~0.95–0.97). Items without embeddings still rank by trust + recency constant term.
+        Only items whose ``Source`` is ``enabled`` and ``trust_score >= 0.8`` are considered (seeded PubMed /
+        ClinicalTrials.gov / openFDA are ~0.95–0.97). Items without embeddings still rank by trust + recency constant term.
 
         When ``age_scope`` is ``pediatric`` or ``adult``, cohort mismatches are strongly downranked; geography
         gives a modest boost when trial countries align with the user's region.
@@ -60,7 +60,11 @@ class RetrievalService:
             .join(Source, Source.id == ResearchItem.source_id)
             .join(ResearchItemEmbedding, ResearchItemEmbedding.research_item_id == ResearchItem.id, isouter=True)
             .join(ResearchItemAI, ResearchItemAI.research_item_id == ResearchItem.id, isouter=True)
-            .where(ResearchItem.condition_id == cid, Source.trust_score >= 0.8)
+            .where(
+                ResearchItem.condition_id == cid,
+                Source.enabled.is_(True),
+                Source.trust_score >= 0.8,
+            )
             .order_by(ResearchItem.published_at.desc())
             .limit(recent_cap)
         ).all()
@@ -99,9 +103,12 @@ class RetrievalService:
                 "research_item_id": str(item.id),
                 "title": item.title,
                 "source_url": item.source_url,
+                "source_name": source.name,
                 "published_at": item.published_at.isoformat() if item.published_at else None,
                 "item_type": item.item_type,
                 "abstract_or_body": item.abstract_or_body,
+                "retrieval_rank": rank,
+                "retrieval_score": float(score),
             }
-            for _, item, _source in top
+            for rank, (score, item, source) in enumerate(top)
         ]

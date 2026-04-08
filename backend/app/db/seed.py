@@ -36,10 +36,15 @@ def seed_initial_data() -> None:
     try:
         upsert_conditions(db)
 
+        # Indexed feeds (ingestion adapters attach ResearchItem rows to these).
+        # "reference" rows are catalog / transparency only: live Orphadata + MedlinePlus snippets in Ask AI
+        # when MEDICAL_INTEL_* flags are on—they do not use the ingestion pipeline yet.
         for name, source_type, base_url, trust in [
             ("PubMed", "papers", "https://pubmed.ncbi.nlm.nih.gov", 0.96),
             ("ClinicalTrials.gov", "trials", "https://clinicaltrials.gov", 0.97),
             ("openFDA", "regulatory", "https://api.fda.gov", 0.95),
+            ("Orphanet (Orphadata)", "reference", "https://www.orpha.net", 0.95),
+            ("MedlinePlus (NLM)", "reference", "https://medlineplus.gov", 0.95),
         ]:
             existing = db.scalar(select(Source).where(Source.name == name))
             if not existing:

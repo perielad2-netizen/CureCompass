@@ -37,3 +37,38 @@ class AskAIAnswerOut(BaseModel):
     suggested_doctor_questions: list[str]
     sources: list[AskAISource]
 
+
+class AskAITrustedSourceOut(BaseModel):
+    title: str
+    source_name: str
+    source_url: str = Field(default="", max_length=4000)
+    short_reason_used: str
+
+
+class AskAIStructuredLLMSchema(AskAIAnswerOut):
+    """Strict OpenAI json_schema output when MEDICAL_INTEL_STRUCTURED_ANSWER is enabled.
+
+    trusted_sources are injected server-side from ranked evidence (not model-generated).
+    """
+
+    simple_explanation: str
+    key_facts: list[str]
+    approved_treatments: str
+    experimental_or_emerging_options: str
+    relevant_clinical_trials: str
+    warning_signs_or_when_to_seek_care: str
+    what_is_uncertain: str
+
+
+class AskAIAnswerOutExtended(AskAIAnswerOut):
+    """API envelope: legacy fields always present; Phase 4 fields present when structured mode is on."""
+
+    simple_explanation: str | None = None
+    key_facts: list[str] | None = None
+    approved_treatments: str | None = None
+    experimental_or_emerging_options: str | None = None
+    relevant_clinical_trials: str | None = None
+    warning_signs_or_when_to_seek_care: str | None = None
+    what_is_uncertain: str | None = None
+    trusted_sources: list[AskAITrustedSourceOut] | None = None
+

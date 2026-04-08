@@ -55,5 +55,12 @@ class Settings(BaseSettings):
     # Skip re-running external ingestion for the same condition if a run succeeded recently (non-admin users).
     ingestion_cooldown_hours: int = 4
 
+    # Phase 2: supplement Ask AI with live Orphadata + MedlinePlus snippets (only when indexed research exists).
+    medical_intel_live_in_ask_ai: bool = False
+    # Phase 3: merge indexed + live into one deduped/ranked evidence block for Ask AI (non-fatal fallback to legacy).
+    medical_intel_aggregated_evidence_in_ask_ai: bool = False
+    # Phase 4: richer JSON sections + plain-language layer (additive API fields). Falls back to classic schema on parse failure.
+    medical_intel_structured_answer: bool = False
+
 
 settings = Settings()

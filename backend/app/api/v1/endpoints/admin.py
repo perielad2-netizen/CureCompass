@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,6 +27,7 @@ from app.schemas.admin_api import (
     AdminSourcePatchIn,
     AdminUsageByUserOut,
 )
+from app.services.admin_ask_ai_limit_metrics import compute_ask_ai_limit_analytics
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -101,8 +102,12 @@ def get_admin_reports(
     _: User = Depends(get_owner_admin_user),
     top_limit: int = Query(30, ge=1, le=200),
     recent_limit: int = Query(30, ge=1, le=200),
+    limit_analytics_days: int = Query(30, ge=1, le=366, description="UTC days for Ask AI limit aggregates"),
 ):
     now = datetime.now(tz=timezone.utc)
+    end_d: date = now.date()
+    start_d: date = end_d - timedelta(days=limit_analytics_days - 1)
+    ask_ai_limit_analytics = compute_ask_ai_limit_analytics(db, period_start=start_d, period_end=end_d)
     cutoff_30d = now - timedelta(days=30)
 
     users_total = db.scalar(select(func.count()).select_from(User)) or 0
@@ -277,4 +282,5 @@ def get_admin_reports(
         ),
         top_ai_users=[_to_user_row(r) for r in top_rows],
         recent_users=[_to_user_row(r) for r in recent_rows],
+        ask_ai_limit_analytics=ask_ai_limit_analytics,
     )

@@ -65,12 +65,59 @@ type ReportUser = {
   last_digest_at: string | null;
 };
 
+type AskAiLimitDaily = {
+  usage_date: string;
+  ask_users: number;
+  users_hit_soft: number;
+  users_hit_max: number;
+  avg_requests_per_user: number;
+  next_day_return_hit_soft_pct: number | null;
+  next_day_return_hit_max_pct: number | null;
+};
+
+type AskAiLimitAnalytics = {
+  period_start: string;
+  period_end: string;
+  ask_users_with_usage: number;
+  users_ever_hit_soft: number;
+  users_ever_hit_max: number;
+  pct_ask_users_hit_soft: number | null;
+  pct_ask_users_hit_max: number | null;
+  avg_requests_per_user_day: number | null;
+  median_requests_per_user_day: number | null;
+  avg_seconds_first_to_soft: number | null;
+  avg_seconds_first_to_max: number | null;
+  next_day_return_after_hit_soft_pct: number | null;
+  next_day_return_after_hit_max_pct: number | null;
+  blocked_attempts_total: number;
+  daily_rows: AskAiLimitDaily[];
+};
+
 type Reports = {
   generated_at: string;
   totals: ReportTotals;
   top_ai_users: ReportUser[];
   recent_users: ReportUser[];
+  ask_ai_limit_analytics: AskAiLimitAnalytics;
 };
+
+const LIMIT_REPORT_DAYS = 30;
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return "—";
+  return `${v.toFixed(1)}%`;
+}
+
+function fmtNum(v: number | null | undefined, digits = 2): string {
+  if (v == null || Number.isNaN(v)) return "—";
+  return Number(v).toFixed(digits);
+}
+
+function fmtSec(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return "—";
+  if (v < 60) return `${Math.round(v)}s`;
+  return `${Math.round(v / 60)}m`;
+}
 
 export default function AdminPage() {
   const t = useTranslations("Admin");
@@ -101,7 +148,7 @@ export default function AdminPage() {
         return Promise.all([
           apiGet<JobRow[]>("/admin/jobs"),
           apiGet<SourceRow[]>("/admin/sources"),
-          apiGet<Reports>("/admin/reports"),
+          apiGet<Reports>(`/admin/reports?limit_analytics_days=${LIMIT_REPORT_DAYS}`),
         ]);
       })
       .then((pair) => {
@@ -195,6 +242,109 @@ export default function AdminPage() {
               <div className="rounded-lg border border-slate-200 p-3">
                 <p className="text-xs text-slate-500">{t("metricPrivateDocs")}</p>
                 <p className="text-xl font-semibold text-slate-900">{reports.totals.private_docs_processed}</p>
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <h3 className="text-base font-semibold text-slate-900">{t("limitAnalyticsTitle")}</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {t("limitAnalyticsPeriod", { days: LIMIT_REPORT_DAYS })} · {reports.ask_ai_limit_analytics.period_start} →{" "}
+                {reports.ask_ai_limit_analytics.period_end}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitAskUsers")}</p>
+                  <p className="text-xl font-semibold text-slate-900">{reports.ask_ai_limit_analytics.ask_users_with_usage}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitHitSoft")}</p>
+                  <p className="text-xl font-semibold text-slate-900">{reports.ask_ai_limit_analytics.users_ever_hit_soft}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitHitMax")}</p>
+                  <p className="text-xl font-semibold text-slate-900">{reports.ask_ai_limit_analytics.users_ever_hit_max}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitBlockedTotal")}</p>
+                  <p className="text-xl font-semibold text-slate-900">{reports.ask_ai_limit_analytics.blocked_attempts_total}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitPctSoft")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtPct(reports.ask_ai_limit_analytics.pct_ask_users_hit_soft)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitPctMax")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtPct(reports.ask_ai_limit_analytics.pct_ask_users_hit_max)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitAvgPerUserDay")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtNum(reports.ask_ai_limit_analytics.avg_requests_per_user_day)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitMedianPerUserDay")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtNum(reports.ask_ai_limit_analytics.median_requests_per_user_day)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitAvgSecToSoft")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtSec(reports.ask_ai_limit_analytics.avg_seconds_first_to_soft)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitAvgSecToMax")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtSec(reports.ask_ai_limit_analytics.avg_seconds_first_to_max)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitNextDaySoft")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtPct(reports.ask_ai_limit_analytics.next_day_return_after_hit_soft_pct)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-xs text-slate-500">{t("limitNextDayMax")}</p>
+                  <p className="text-xl font-semibold text-slate-900">
+                    {fmtPct(reports.ask_ai_limit_analytics.next_day_return_after_hit_max_pct)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 max-h-[min(60vh,24rem)] overflow-auto rounded-xl border border-slate-200 bg-white">
+                <table className="min-w-full text-left text-xs md:text-sm">
+                  <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyTableDate")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyAskUsers")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyHit5")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyHit7")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyAvg")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyNextSoft")}</th>
+                      <th className="px-2 py-2 font-medium">{t("limitDailyNextMax")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reports.ask_ai_limit_analytics.daily_rows.map((row) => (
+                      <tr key={row.usage_date} className="border-b border-slate-100">
+                        <td className="whitespace-nowrap px-2 py-1.5 text-slate-800">{row.usage_date}</td>
+                        <td className="px-2 py-1.5">{row.ask_users}</td>
+                        <td className="px-2 py-1.5">{row.users_hit_soft}</td>
+                        <td className="px-2 py-1.5">{row.users_hit_max}</td>
+                        <td className="px-2 py-1.5">{fmtNum(row.avg_requests_per_user, 3)}</td>
+                        <td className="px-2 py-1.5">{fmtPct(row.next_day_return_hit_soft_pct)}</td>
+                        <td className="px-2 py-1.5">{fmtPct(row.next_day_return_hit_max_pct)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 

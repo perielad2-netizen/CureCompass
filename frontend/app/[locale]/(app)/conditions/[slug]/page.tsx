@@ -1,13 +1,22 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useParams, useSearchParams } from "next/navigation";
 import { UpdateCard } from "@/components/condition/update-card";
 import { LtrIsland } from "@/components/ui/ltr-island";
+import { AskAiStoredAssistantMessage } from "@/components/ask-ai/ask-ai-stored-assistant";
+import { AskAiThreadThinking } from "@/components/ask-ai/ask-ai-thread-thinking";
+import { ConditionHubSummary } from "@/components/condition/condition-hub-summary";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData } from "@/lib/api";
+import {
+  trackAskAiEmptyStatePromptClick,
+  trackAskAiHubCta,
+  trackAskAiLimitBlocked,
+  trackAskAiNewConversation,
+} from "@/lib/product-analytics";
 
 type ConditionDetail = {
   id: string;
@@ -56,13 +65,46 @@ type PrivateDocRow = {
 
 type AskMode = "research_only" | "documents_only" | "research_and_documents";
 
-type AskSourceRow = {
-  title: string;
-  source_url: string;
-  research_item_id?: string;
-  document_id?: string;
-  item_type?: string;
+type AskThreadMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  structured_json: unknown;
+  created_at: string;
 };
+
+type AskAiDailyUsage = {
+  count: number;
+  remaining: number | null;
+  soft_limit: number;
+  grace_limit: number;
+  max_limit: number;
+  is_limited: boolean;
+  in_grace_zone: boolean;
+  is_premium: boolean;
+};
+
+function isAskAiLimitPostResponse(res: unknown): res is { limit_reached: true; usage?: AskAiDailyUsage } {
+  return typeof res === "object" && res !== null && (res as { limit_reached?: boolean }).limit_reached === true;
+}
+
+function pickAskAiUsage(res: unknown): AskAiDailyUsage | null {
+  if (typeof res !== "object" || res === null || !("usage" in res)) return null;
+  const u = (res as { usage: unknown }).usage;
+  if (!u || typeof u !== "object") return null;
+  return u as AskAiDailyUsage;
+}
+
+function formatAskThreadTime(iso: string, loc: string): string {
+  try {
+    return new Date(iso).toLocaleString(loc === "he" ? "he-IL" : "en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return "";
+  }
+}
 
 const tabBtn =
   "rounded-full px-3 py-1.5 text-sm font-medium transition-colors md:px-4 md:py-2";
@@ -80,26 +122,30 @@ export default function ConditionPage() {
   const [tab, setTab] = useState<TabId>("updates");
   const [data, setData] = useState<ConditionDetail | null>(null);
   const [updates, setUpdates] = useState<FeedUpdate[]>([]);
+  const [updatesTotal, setUpdatesTotal] = useState<number | null>(null);
   const [trials, setTrials] = useState<TrialRow[] | null>(null);
   const [trialsLoading, setTrialsLoading] = useState(false);
   const [error, setError] = useState("");
   const [askInput, setAskInput] = useState("");
   const [askLoading, setAskLoading] = useState(false);
   const [askError, setAskError] = useState("");
-  const [askAnswer, setAskAnswer] = useState<{
-    direct_answer: string;
-    what_changed_recently: string;
-    evidence_strength: string;
-    available_now_or_experimental: string;
-    suggested_doctor_questions: string[];
-    sources: AskSourceRow[];
-  } | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<AskThreadMessage[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadLoadError, setThreadLoadError] = useState("");
+  const askTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const threadListRef = useRef<HTMLUListElement>(null);
+  /** User scrolled away from bottom — avoid auto-scroll on assistant updates. */
+  const skipAutoScrollRef = useRef(false);
+  /** After sending, always scroll to show thinking + new content. */
+  const pendingSendScrollRef = useRef(false);
   const [askMode, setAskMode] = useState<AskMode>("research_only");
   const [privateDocs, setPrivateDocs] = useState<PrivateDocRow[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [consentUpload, setConsentUpload] = useState(false);
+  const [askAiUsage, setAskAiUsage] = useState<AskAiDailyUsage | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -114,18 +160,40 @@ export default function ConditionPage() {
       `/conditions/by-slug/${encodeURIComponent(slug)}/updates?limit=12`,
       { searchParams: { locale } }
     )
-      .then((r) => setUpdates(r.items))
-      .catch(() => setUpdates([]));
+      .then((r) => {
+        setUpdates(r.items);
+        setUpdatesTotal(typeof r.total === "number" ? r.total : r.items.length);
+      })
+      .catch(() => {
+        setUpdates([]);
+        setUpdatesTotal(null);
+      });
   }, [slug, locale]);
 
   useEffect(() => {
-    if (tab !== "trials" || !slug || trials !== null) return;
+    if (!slug || !data) return;
+    if (!data.followed) {
+      setTrials([]);
+      setTrialsLoading(false);
+      return;
+    }
+    let cancelled = false;
     setTrialsLoading(true);
+    setTrials(null);
     apiGet<TrialRow[]>(`/conditions/by-slug/${encodeURIComponent(slug)}/trials?limit=50`)
-      .then(setTrials)
-      .catch(() => setTrials([]))
-      .finally(() => setTrialsLoading(false));
-  }, [tab, slug, trials]);
+      .then((rows) => {
+        if (!cancelled) setTrials(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setTrials([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTrialsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, data]);
 
   const loadPrivateDocs = useCallback(() => {
     if (!slug || !data?.followed) return;
@@ -140,10 +208,99 @@ export default function ConditionPage() {
       .finally(() => setDocsLoading(false));
   }, [slug, data?.followed]);
 
+  const loadAskThread = useCallback(async () => {
+    if (!slug || !data?.followed) return;
+    setThreadLoading(true);
+    setThreadLoadError("");
+    try {
+      const list = await apiGet<{ id: string }[]>(
+        `/conditions/${encodeURIComponent(slug)}/ask-ai/conversations`
+      );
+      if (!list.length) {
+        setConversationId(null);
+        setThreadMessages([]);
+        return;
+      }
+      const cid = list[0].id;
+      setConversationId(cid);
+      const conv = await apiGet<{ messages: AskThreadMessage[] }>(`/ask-ai/conversations/${cid}`);
+      setThreadMessages(Array.isArray(conv.messages) ? conv.messages : []);
+    } catch {
+      setThreadLoadError(t("askThreadLoadError"));
+      setThreadMessages([]);
+    } finally {
+      setThreadLoading(false);
+    }
+  }, [slug, data?.followed, t]);
+
+  const loadAskAiUsage = useCallback(async () => {
+    if (!data?.followed) {
+      setAskAiUsage(null);
+      return;
+    }
+    try {
+      const r = await apiGet<{ usage: AskAiDailyUsage }>("/ask-ai/daily-usage");
+      setAskAiUsage(r.usage);
+    } catch {
+      setAskAiUsage(null);
+    }
+  }, [data?.followed]);
+
+  useEffect(() => {
+    setConversationId(null);
+    setThreadMessages([]);
+    setThreadLoadError("");
+    setAskAiUsage(null);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!data?.followed) {
+      setThreadMessages([]);
+      setConversationId(null);
+      setAskAiUsage(null);
+    }
+  }, [data?.followed]);
+
   useEffect(() => {
     if (tab !== "ask") return;
     void loadPrivateDocs();
   }, [tab, loadPrivateDocs]);
+
+  useEffect(() => {
+    if (tab !== "ask" || !slug || !data?.followed) return;
+    void loadAskThread();
+    void loadAskAiUsage();
+  }, [tab, slug, data?.followed, loadAskThread, loadAskAiUsage]);
+
+  const startNewConversation = useCallback(() => {
+    if (!data?.slug) return;
+    trackAskAiNewConversation({ condition_slug: data.slug, locale });
+    setConversationId(null);
+    setThreadMessages([]);
+    setAskError("");
+    skipAutoScrollRef.current = false;
+    void loadAskAiUsage();
+  }, [data?.slug, locale, loadAskAiUsage]);
+
+  const onThreadScroll = useCallback(() => {
+    const el = threadListRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    skipAutoScrollRef.current = gap > 150;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (threadLoading) return;
+    const hasThread = threadMessages.length > 0 || askLoading;
+    if (!hasThread) return;
+    const force = pendingSendScrollRef.current;
+    if (skipAutoScrollRef.current && !force) return;
+    const el = threadListRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+    if (force) pendingSendScrollRef.current = false;
+  }, [threadMessages, askLoading, threadLoading]);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
@@ -206,8 +363,40 @@ export default function ConditionPage() {
         ) : null}
       </header>
 
+      <ConditionHubSummary
+        conditionName={
+          apiEnglish ? (
+            <LtrIsland>
+              <span>{data.canonical_name}</span>
+            </LtrIsland>
+          ) : (
+            data.canonical_name
+          )
+        }
+        followed={data.followed}
+        updatesTotal={updatesTotal}
+        updatesPreviewCount={updates.length}
+        latestUpdateTitle={updates[0]?.title ?? null}
+        recruitingTrialCount={
+          trials == null ? null : trials.filter((tr) => /recruit/i.test(tr.status || "")).length
+        }
+        trialsLoaded={trials !== null}
+        onAsk={() => {
+          trackAskAiHubCta({ condition_slug: data.slug, locale, cta_name: "ask" });
+          setTab("ask");
+        }}
+        onTrials={() => {
+          trackAskAiHubCta({ condition_slug: data.slug, locale, cta_name: "trials" });
+          setTab("trials");
+        }}
+        onUpdates={() => {
+          trackAskAiHubCta({ condition_slug: data.slug, locale, cta_name: "updates" });
+          setTab("updates");
+        }}
+      />
+
       <div
-        className="mt-6 flex flex-wrap gap-2 border-b border-slate-200 pb-3"
+        className="mt-6 flex gap-2 overflow-x-auto overflow-y-hidden border-b border-slate-200 pb-3 [-webkit-overflow-scrolling:touch]"
         role="tablist"
         aria-label={t("tablistAria")}
       >
@@ -224,7 +413,7 @@ export default function ConditionPage() {
             type="button"
             role="tab"
             aria-selected={tab === id}
-            className={`${tabBtn} ${tab === id ? tabActive : tabIdle}`}
+            className={`${tabBtn} shrink-0 ${tab === id ? tabActive : tabIdle}`}
             onClick={() => setTab(id)}
           >
             {label}
@@ -473,7 +662,136 @@ export default function ConditionPage() {
                 </select>
               </div>
 
+              {threadLoading ? (
+                <p className="mt-4 text-sm text-slate-500">{t("askThreadLoading")}</p>
+              ) : null}
+              {threadLoadError ? (
+                <p className="mt-4 text-sm text-rose-600">{threadLoadError}</p>
+              ) : null}
+
+              {!threadLoading && (threadMessages.length > 0 || askLoading) ? (
+                <ul
+                  ref={threadListRef}
+                  onScroll={onThreadScroll}
+                  className="mt-4 max-h-[min(70vh,32rem)] list-none space-y-5 overflow-y-auto overscroll-contain rounded-xl border border-slate-100 bg-slate-50/50 p-4 [-webkit-overflow-scrolling:touch]"
+                >
+                  {threadMessages.map((m) => (
+                    <li key={m.id} className="text-sm">
+                      {m.role === "user" ? (
+                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            {t("askYourQuestionLabel")}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-slate-800">{m.content}</p>
+                        </div>
+                      ) : (
+                        <AskAiStoredAssistantMessage
+                          message={{
+                            id: m.id,
+                            content: m.content,
+                            structured_json: m.structured_json,
+                            created_at: m.created_at,
+                          }}
+                          answerLtr={answerLtr}
+                          askTextareaRef={askTextareaRef}
+                          onPickFollowUp={(q) => setAskInput(q)}
+                          analyticsContext={{ conditionSlug: data.slug, locale }}
+                        />
+                      )}
+                      <time className="mt-1 block text-xs text-slate-400" dateTime={m.created_at}>
+                        {formatAskThreadTime(m.created_at, locale)}
+                      </time>
+                    </li>
+                  ))}
+                  {askLoading ? (
+                    <AskAiThreadThinking label={t("askThinkingInThread")} sublabel={t("askThinkingInThreadSub")} />
+                  ) : null}
+                </ul>
+              ) : null}
+
+              {data.followed && !threadLoading && threadMessages.length > 0 ? (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    title={t("askNewConversationHint")}
+                    className="text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-primary"
+                    onClick={startNewConversation}
+                  >
+                    {t("askNewConversation")}
+                  </button>
+                </div>
+              ) : null}
+
+              {data.followed && !threadLoading && !askLoading && threadMessages.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
+                  <p className="text-sm font-medium text-slate-800">{t("askEmptyStateTitle")}</p>
+                  <p className="mt-2 text-xs text-slate-600">{t("askEmptyStateHint")}</p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {(
+                      [
+                        ["treatments", "askEmptyStarter1"],
+                        ["trials", "askEmptyStarter2"],
+                        ["warnings", "askEmptyStarter3"],
+                      ] as const
+                    ).map(([promptKey, msgKey]) => (
+                      <button
+                        key={promptKey}
+                        type="button"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-start text-sm text-slate-700 hover:border-primary/40 hover:bg-slate-50"
+                        onClick={() => {
+                          trackAskAiEmptyStatePromptClick({
+                            condition_slug: data.slug,
+                            locale,
+                            prompt_key: promptKey,
+                          });
+                          setAskInput(t(msgKey));
+                          askTextareaRef.current?.focus();
+                        }}
+                      >
+                        {t(msgKey)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {data.followed && askAiUsage?.is_premium ? (
+                <p className="mt-4 text-xs text-slate-500">{t("askQuestionsRemainingPremium")}</p>
+              ) : null}
+
+              {data.followed && askAiUsage && !askAiUsage.is_premium ? (
+                <div
+                  className={`mt-4 rounded-lg border px-3 py-2.5 text-sm ${
+                    askAiUsage.is_limited
+                      ? "border-rose-200 bg-rose-50/90 text-rose-950"
+                      : askAiUsage.remaining !== null && askAiUsage.remaining <= 2
+                        ? "border-amber-200 bg-amber-50/70 text-amber-950"
+                        : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {askAiUsage.is_limited ? (
+                    apiEnglish ? (
+                      <LtrIsland>
+                        <span className="whitespace-pre-line">{t("askDailyLimitMessage")}</span>
+                      </LtrIsland>
+                    ) : (
+                      <p className="whitespace-pre-line">{t("askDailyLimitMessage")}</p>
+                    )
+                  ) : (
+                    <>
+                      <p className="font-medium">
+                        {t("askQuestionsRemaining", { count: askAiUsage.remaining ?? 0 })}
+                      </p>
+                      {askAiUsage.in_grace_zone ? (
+                        <p className="mt-1 text-xs text-slate-600">{t("askDailyLimitLowHint")}</p>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
+
               <textarea
+                ref={askTextareaRef}
                 className="mt-4 min-h-24 w-full rounded-lg border border-slate-300 p-3 text-sm"
                 placeholder={t("askPlaceholder", { slug: data.slug.toUpperCase() })}
                 value={askInput}
@@ -482,28 +800,36 @@ export default function ConditionPage() {
               <button
                 type="button"
                 className="mt-3 rounded-lg bg-primary px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!askInput.trim() || askLoading}
+                disabled={
+                  !askInput.trim() ||
+                  askLoading ||
+                  Boolean(askAiUsage && !askAiUsage.is_premium && askAiUsage.is_limited)
+                }
                 onClick={async () => {
                   if (!askInput.trim()) return;
+                  pendingSendScrollRef.current = true;
+                  skipAutoScrollRef.current = false;
                   setAskLoading(true);
                   setAskError("");
                   try {
-                    const res = await apiPost<{
-                      direct_answer: string;
-                      what_changed_recently: string;
-                      evidence_strength: string;
-                      available_now_or_experimental: string;
-                      suggested_doctor_questions: string[];
-                      sources: AskSourceRow[];
-                    }>(`/conditions/${data.slug}/ask-ai`, {
-                      body: {
-                        prompt: askInput.trim(),
-                        answer_locale: locale === "he" ? "he" : "en",
-                        mode: askMode,
-                        document_ids: [],
-                      },
-                    });
-                    setAskAnswer(res);
+                    const body: Record<string, unknown> = {
+                      prompt: askInput.trim(),
+                      answer_locale: locale === "he" ? "he" : "en",
+                      mode: askMode,
+                      document_ids: [],
+                    };
+                    if (conversationId) body.conversation_id = conversationId;
+                    const res = await apiPost<Record<string, unknown>>(`/conditions/${data.slug}/ask-ai`, { body });
+                    if (isAskAiLimitPostResponse(res)) {
+                      const u = res.usage;
+                      if (u) setAskAiUsage(u);
+                      trackAskAiLimitBlocked({ condition_slug: data.slug, locale });
+                      return;
+                    }
+                    const u = pickAskAiUsage(res);
+                    if (u) setAskAiUsage(u);
+                    setAskInput("");
+                    await loadAskThread();
                   } catch (err) {
                     if (err instanceof ApiError) {
                       setAskError(err.message);
@@ -525,69 +851,6 @@ export default function ConditionPage() {
                     askError
                   )}
                 </p>
-              ) : null}
-              {askAnswer ? (
-                <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div>
-                    <p className="font-medium text-slate-900">{t("directAnswer")}</p>
-                    <AnswerBody>
-                      <p className="text-slate-700">{askAnswer.direct_answer}</p>
-                    </AnswerBody>
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">{t("whatChanged")}</p>
-                    <AnswerBody>
-                      <p className="text-slate-700">{askAnswer.what_changed_recently}</p>
-                    </AnswerBody>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <AnswerBody>
-                      <p className="text-slate-700">
-                        <span className="font-medium text-slate-900">{t("evidence")}</span> {askAnswer.evidence_strength}
-                      </p>
-                    </AnswerBody>
-                    <AnswerBody>
-                      <p className="text-slate-700">
-                        <span className="font-medium text-slate-900">{t("availability")}</span>{" "}
-                        {askAnswer.available_now_or_experimental}
-                      </p>
-                    </AnswerBody>
-                  </div>
-                  {!!askAnswer.suggested_doctor_questions?.length && (
-                    <div>
-                      <p className="font-medium text-slate-900">{t("doctorQuestions")}</p>
-                      <AnswerBody>
-                        <ul className="mt-1 list-disc space-y-1 ps-5 text-slate-700">
-                          {askAnswer.suggested_doctor_questions.map((q) => (
-                            <li key={q}>{q}</li>
-                          ))}
-                        </ul>
-                      </AnswerBody>
-                    </div>
-                  )}
-                  {!!askAnswer.sources?.length && (
-                    <div>
-                      <p className="font-medium text-slate-900">{t("sources")}</p>
-                      <AnswerBody>
-                        <ul className="mt-1 space-y-1">
-                          {askAnswer.sources.map((s) => (
-                            <li key={`${s.title}-${s.source_url || s.document_id || ""}`}>
-                              {s.source_url ? (
-                                <a className="text-primary underline" href={s.source_url} target="_blank" rel="noreferrer">
-                                  {s.title}
-                                </a>
-                              ) : (
-                                <span className="text-slate-800">
-                                  {t("sourceYourDocument")}: {s.title}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </AnswerBody>
-                    </div>
-                  )}
-                </div>
               ) : null}
             </article>
           </section>

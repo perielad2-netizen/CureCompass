@@ -3,6 +3,34 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class AdminAskAiLimitDailyRowOut(BaseModel):
+    usage_date: str
+    ask_users: int
+    users_hit_soft: int
+    users_hit_max: int
+    avg_requests_per_user: float
+    next_day_return_hit_soft_pct: float | None
+    next_day_return_hit_max_pct: float | None
+
+
+class AdminAskAiLimitAnalyticsOut(BaseModel):
+    period_start: str
+    period_end: str
+    ask_users_with_usage: int
+    users_ever_hit_soft: int
+    users_ever_hit_max: int
+    pct_ask_users_hit_soft: float | None
+    pct_ask_users_hit_max: float | None
+    avg_requests_per_user_day: float | None
+    median_requests_per_user_day: float | None
+    avg_seconds_first_to_soft: float | None
+    avg_seconds_first_to_max: float | None
+    next_day_return_after_hit_soft_pct: float | None
+    next_day_return_after_hit_max_pct: float | None
+    blocked_attempts_total: int
+    daily_rows: list[AdminAskAiLimitDailyRowOut]
+
+
 class AdminJobRunOut(BaseModel):
     id: str
     job_type: str
@@ -24,7 +52,10 @@ class AdminSourceOut(BaseModel):
 
 
 class AdminSourcePatchIn(BaseModel):
-    enabled: bool = Field(description="Whether this source is used during ingestion")
+    enabled: bool = Field(
+        description="Whether this source is used for ingestion, indexed research retrieval, and live Ask AI providers "
+        "that map to this source (e.g. Orphadata / MedlinePlus)."
+    )
 
 
 class AdminKpiTotalsOut(BaseModel):
@@ -69,3 +100,4 @@ class AdminReportsOut(BaseModel):
     totals: AdminKpiTotalsOut
     top_ai_users: list[AdminUsageByUserOut]
     recent_users: list[AdminUsageByUserOut]
+    ask_ai_limit_analytics: AdminAskAiLimitAnalyticsOut
