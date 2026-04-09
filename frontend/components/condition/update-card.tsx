@@ -22,6 +22,9 @@ type UpdateCardProps = {
   itemType?: string;
   conditionName?: string;
   featured?: boolean;
+  askHref?: string;
+  askCtaLabel?: string;
+  onAskClick?: () => void;
 };
 
 export function UpdateCard(props: UpdateCardProps) {
@@ -130,6 +133,17 @@ export function UpdateCard(props: UpdateCardProps) {
       <div className="mt-4 text-xs text-slate-500">
         {t("sourcePrefix")} <LtrInline className="break-all">{props.source}</LtrInline>
       </div>
+      {props.askHref ? (
+        <div className="mt-3">
+          <Link
+            href={props.askHref}
+            className="text-sm font-medium text-primary hover:underline"
+            onClick={props.onAskClick}
+          >
+            {props.askCtaLabel ?? t("askAiAboutThis")}
+          </Link>
+        </div>
+      ) : null}
     </article>
   );
 }

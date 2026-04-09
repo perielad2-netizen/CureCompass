@@ -6,6 +6,8 @@ import { Link } from "@/i18n/navigation";
 import { UpdateCard } from "@/components/condition/update-card";
 import { LtrIsland } from "@/components/ui/ltr-island";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
+import { buildAskPrefillPrompt, buildConditionAskHref } from "@/lib/ask-ai-entry";
+import { trackAskAiDashboardCtaClick, trackAskAiResearchCardCtaClick } from "@/lib/product-analytics";
 
 type RecruitingTrialBrief = {
   id: string;
@@ -111,9 +113,26 @@ export default function DashboardPage() {
           t("loadingFeed")
         )}
       </div>
-      <Link href="/digests" className="mt-2 inline-block text-sm font-medium text-primary">
-        {t("openBriefings")}
-      </Link>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link href="/digests" className="inline-block text-sm font-medium text-primary">
+          {t("openBriefings")}
+        </Link>
+        {data?.followed_conditions?.[0]?.slug ? (
+          <Link
+            href={buildConditionAskHref({ slug: data.followed_conditions[0].slug })}
+            className="inline-block text-sm font-medium text-primary"
+            onClick={() =>
+              trackAskAiDashboardCtaClick({
+                condition_slug: data.followed_conditions[0].slug,
+                locale,
+                entry_point: "dashboard_primary",
+              })
+            }
+          >
+            {t("openAskAi")}
+          </Link>
+        ) : null}
+      </div>
 
       {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_min(100%,320px)] lg:items-start">
@@ -213,6 +232,19 @@ export default function DashboardPage() {
               <h2 className="text-lg font-semibold text-slate-900">{t("latestHeading")}</h2>
               <p className="-mt-2 text-sm text-slate-600">{t("latestSub")}</p>
               {data.latest_important_updates.map((u, i) => (
+                (() => {
+                  const askSlug = u.condition_slug || data.followed_conditions[0]?.slug;
+                  const askHref = askSlug
+                    ? buildConditionAskHref({
+                        slug: askSlug,
+                        prefill: buildAskPrefillPrompt({
+                          locale,
+                          researchTitle: u.title,
+                          conditionName: u.condition_name ?? null,
+                        }),
+                      })
+                    : undefined;
+                  return (
                 <UpdateCard
                   key={u.id}
                   researchItemId={u.id}
@@ -228,7 +260,20 @@ export default function DashboardPage() {
                   conditionName={u.condition_name}
                   recapLocale={u.recap_locale ?? "en"}
                   featured={i === 0 && data.latest_important_updates.length > 1}
+                  askHref={askHref}
+                  onAskClick={() => {
+                    if (!askSlug) return;
+                    trackAskAiResearchCardCtaClick({
+                      condition_slug: askSlug,
+                      locale,
+                      source_name: u.source_url,
+                      item_type: u.item_type,
+                      entry_point: "dashboard_card",
+                    });
+                  }}
                 />
+                  );
+                })()
               ))}
             </>
           ) : (

@@ -101,3 +101,21 @@ export function trackAskAiEmptyStatePromptClick(props: {
 export function trackAskAiLimitBlocked(props: { condition_slug: string; locale: string }): void {
   trackProductEvent("ask_ai_limit_blocked", props);
 }
+
+export function trackAskAiDashboardCtaClick(props: {
+  condition_slug: string;
+  locale: string;
+  entry_point: "dashboard_primary";
+}): void {
+  trackProductEvent("ask_ai_dashboard_cta_click", props);
+}
+
+export function trackAskAiResearchCardCtaClick(props: {
+  condition_slug: string;
+  locale: string;
+  source_name?: string;
+  item_type?: string;
+  entry_point: "dashboard_card" | "condition_card";
+}): void {
+  trackProductEvent("ask_ai_research_card_cta_click", props);
+}

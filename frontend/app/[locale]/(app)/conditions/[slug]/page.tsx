@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useParams, useSearchParams } from "next/navigation";
 import { UpdateCard } from "@/components/condition/update-card";
 import { LtrIsland } from "@/components/ui/ltr-island";
@@ -11,11 +11,13 @@ import { AskAiStoredAssistantMessage } from "@/components/ask-ai/ask-ai-stored-a
 import { AskAiThreadThinking } from "@/components/ask-ai/ask-ai-thread-thinking";
 import { ConditionHubSummary } from "@/components/condition/condition-hub-summary";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData } from "@/lib/api";
+import { buildAskPrefillPrompt, buildConditionAskHref } from "@/lib/ask-ai-entry";
 import {
   trackAskAiEmptyStatePromptClick,
   trackAskAiHubCta,
   trackAskAiLimitBlocked,
   trackAskAiNewConversation,
+  trackAskAiResearchCardCtaClick,
 } from "@/lib/product-analytics";
 
 type ConditionDetail = {
@@ -118,6 +120,7 @@ export default function ConditionPage() {
   const answerLtr = locale !== "he";
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const slug = typeof params.slug === "string" ? params.slug : params.slug?.[0] ?? "";
   const [tab, setTab] = useState<TabId>("updates");
   const [data, setData] = useState<ConditionDetail | null>(null);
@@ -134,11 +137,14 @@ export default function ConditionPage() {
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadLoadError, setThreadLoadError] = useState("");
   const askTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const docsFileInputRef = useRef<HTMLInputElement>(null);
   const threadListRef = useRef<HTMLUListElement>(null);
   /** User scrolled away from bottom — avoid auto-scroll on assistant updates. */
   const skipAutoScrollRef = useRef(false);
   /** After sending, always scroll to show thinking + new content. */
   const pendingSendScrollRef = useRef(false);
+  /** After response arrives, scroll to the start of the assistant answer. */
+  const pendingAnswerStartScrollRef = useRef(false);
   const [askMode, setAskMode] = useState<AskMode>("research_only");
   const [privateDocs, setPrivateDocs] = useState<PrivateDocRow[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -293,12 +299,22 @@ export default function ConditionPage() {
     if (threadLoading) return;
     const hasThread = threadMessages.length > 0 || askLoading;
     if (!hasThread) return;
-    const force = pendingSendScrollRef.current;
-    if (skipAutoScrollRef.current && !force) return;
     const el = threadListRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const force = pendingSendScrollRef.current;
+    const shouldScrollToAnswerStart = pendingAnswerStartScrollRef.current && !askLoading;
+    if (shouldScrollToAnswerStart) {
+      const assistants = Array.from(el.querySelectorAll<HTMLElement>("[data-msg-role='assistant']"));
+      const lastAssistant = assistants[assistants.length - 1];
+      if (lastAssistant) {
+        lastAssistant.scrollIntoView({ block: "start" });
+      }
+      pendingAnswerStartScrollRef.current = false;
+      pendingSendScrollRef.current = false;
+      return;
     }
+    if (skipAutoScrollRef.current && !force) return;
+    el.scrollTop = el.scrollHeight;
     if (force) pendingSendScrollRef.current = false;
   }, [threadMessages, askLoading, threadLoading]);
 
@@ -308,6 +324,18 @@ export default function ConditionPage() {
       setTab(tabParam);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const prefill = searchParams.get("ask_prefill");
+    if (!prefill?.trim()) return;
+    setTab("ask");
+    setAskInput(prefill.trim());
+    setTimeout(() => askTextareaRef.current?.focus(), 0);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("ask_prefill");
+    const q = next.toString();
+    router.replace(`/conditions/${encodeURIComponent(slug)}${q ? `?${q}` : ""}`);
+  }, [searchParams, router, slug]);
 
   const AnswerBody = ({ children }: { children: ReactNode }) =>
     answerLtr ? <LtrIsland>{children}</LtrIsland> : <>{children}</>;
@@ -429,6 +457,16 @@ export default function ConditionPage() {
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {updates.length ? (
                 updates.map((u) => (
+                  (() => {
+                    const askHref = buildConditionAskHref({
+                      slug: data.slug,
+                      prefill: buildAskPrefillPrompt({
+                        locale,
+                        researchTitle: u.title,
+                        conditionName: data.canonical_name,
+                      }),
+                    });
+                    return (
                   <UpdateCard
                     key={u.id}
                     researchItemId={u.id}
@@ -440,7 +478,19 @@ export default function ConditionPage() {
                     evidenceStage={u.evidence_stage_label}
                     recapLocale={u.recap_locale ?? "en"}
                     detailHref={`/updates/${u.id}`}
+                    askHref={askHref}
+                    onAskClick={() =>
+                      trackAskAiResearchCardCtaClick({
+                        condition_slug: data.slug,
+                        locale,
+                        source_name: u.source_name,
+                        item_type: u.item_type,
+                        entry_point: "condition_card",
+                      })
+                    }
                   />
+                    );
+                  })()
                 ))
               ) : (
                 <UpdateCard
@@ -531,7 +581,40 @@ export default function ConditionPage() {
           <section>
             <h2 className="sr-only">{t("srAsk")}</h2>
             <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-calm lg:max-w-2xl">
-              <h3 className="text-base font-semibold">{t("askTitle")}</h3>
+              <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
+                <h3 className="text-base font-semibold text-slate-900">{t("askHeroTitle")}</h3>
+                <p className="mt-1 text-sm text-slate-700">{t("askHeroSubtitle")}</p>
+                <button
+                  type="button"
+                  className="mt-3 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white hover:opacity-95"
+                  onClick={() => askTextareaRef.current?.focus()}
+                >
+                  {t("askHeroPrimaryCta")}
+                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["treatments", "askHeroChipTreatments"],
+                      ["trials", "askHeroChipTrials"],
+                      ["warnings", "askHeroChipWatchFor"],
+                    ] as const
+                  ).map(([promptKey, msgKey]) => (
+                    <button
+                      key={promptKey}
+                      type="button"
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-primary/40 hover:bg-slate-50"
+                      onClick={() => {
+                        setAskInput(t(msgKey));
+                        askTextareaRef.current?.focus();
+                      }}
+                    >
+                      {t(msgKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <h3 className="mt-5 text-base font-semibold">{t("askTitle")}</h3>
               <p className="mt-2 text-sm text-slate-600">{t("askIntroModes")}</p>
               <p className="mt-2 text-sm text-slate-600">
                 {t("askIntroBefore")}
@@ -543,7 +626,16 @@ export default function ConditionPage() {
 
               {data.followed ? (
                 <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                  <h4 className="text-sm font-semibold text-slate-900">{t("docsSectionTitle")}</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">{t("docsValueTitle")}</h4>
+                  <p className="mt-1 text-sm text-slate-600">{t("docsValueSubtitle")}</p>
+                  <button
+                    type="button"
+                    className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-primary/40"
+                    onClick={() => docsFileInputRef.current?.click()}
+                  >
+                    {t("docsUploadCta")}
+                  </button>
+                  <h4 className="mt-4 text-sm font-semibold text-slate-900">{t("docsSectionTitle")}</h4>
                   <p className="mt-1 text-xs text-slate-600">{t("docsSectionHint")}</p>
                   <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-700">
                     <input
@@ -558,6 +650,7 @@ export default function ConditionPage() {
                     <label className="text-sm text-slate-700">
                       <span className="sr-only">{t("docsPickFile")}</span>
                       <input
+                        ref={docsFileInputRef}
                         type="file"
                         accept="application/pdf,.pdf"
                         className="max-w-full text-sm"
@@ -599,7 +692,18 @@ export default function ConditionPage() {
                   {docsLoading ? (
                     <p className="mt-3 text-sm text-slate-500">{t("docListLoading")}</p>
                   ) : privateDocs.length ? (
-                    <ul className="mt-3 space-y-2 text-sm">
+                    <>
+                      <button
+                        type="button"
+                        className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-primary/40"
+                        onClick={() => {
+                          setAskInput(t("docsAfterUploadSuggestedQuestion"));
+                          askTextareaRef.current?.focus();
+                        }}
+                      >
+                        {t("docsAfterUploadSuggestedQuestion")}
+                      </button>
+                      <ul className="mt-3 space-y-2 text-sm">
                       {privateDocs.map((d) => (
                         <li
                           key={d.id}
@@ -637,9 +741,13 @@ export default function ConditionPage() {
                           </button>
                         </li>
                       ))}
-                    </ul>
+                      </ul>
+                    </>
                   ) : (
-                    <p className="mt-3 text-sm text-slate-500">{t("docsEmpty")}</p>
+                    <>
+                      <p className="mt-3 text-sm text-slate-500">{t("docsEmpty")}</p>
+                      <p className="mt-1 text-xs text-slate-500">{t("docsNoFilesNudge")}</p>
+                    </>
                   )}
                 </div>
               ) : (
@@ -676,7 +784,7 @@ export default function ConditionPage() {
                   className="mt-4 max-h-[min(70vh,32rem)] list-none space-y-5 overflow-y-auto overscroll-contain rounded-xl border border-slate-100 bg-slate-50/50 p-4 [-webkit-overflow-scrolling:touch]"
                 >
                   {threadMessages.map((m) => (
-                    <li key={m.id} className="text-sm">
+                    <li key={m.id} className="text-sm" data-msg-role={m.role}>
                       {m.role === "user" ? (
                         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -724,8 +832,17 @@ export default function ConditionPage() {
 
               {data.followed && !threadLoading && !askLoading && threadMessages.length === 0 ? (
                 <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
-                  <p className="text-sm font-medium text-slate-800">{t("askEmptyStateTitle")}</p>
-                  <p className="mt-2 text-xs text-slate-600">{t("askEmptyStateHint")}</p>
+                  {(askAiUsage?.count ?? 0) === 0 ? (
+                    <>
+                      <p className="text-sm font-medium text-slate-800">{t("askFirstUseTitle")}</p>
+                      <p className="mt-2 text-xs text-slate-600">{t("askFirstUseHint")}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-slate-800">{t("askEmptyStateTitle")}</p>
+                      <p className="mt-2 text-xs text-slate-600">{t("askEmptyStateHint")}</p>
+                    </>
+                  )}
                   <div className="mt-3 flex flex-col gap-2">
                     {(
                       [
@@ -808,6 +925,7 @@ export default function ConditionPage() {
                 onClick={async () => {
                   if (!askInput.trim()) return;
                   pendingSendScrollRef.current = true;
+                  pendingAnswerStartScrollRef.current = true;
                   skipAutoScrollRef.current = false;
                   setAskLoading(true);
                   setAskError("");
@@ -831,6 +949,7 @@ export default function ConditionPage() {
                     setAskInput("");
                     await loadAskThread();
                   } catch (err) {
+                    pendingAnswerStartScrollRef.current = false;
                     if (err instanceof ApiError) {
                       setAskError(err.message);
                     } else setAskError(t("askFailed"));

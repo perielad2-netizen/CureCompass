@@ -35,6 +35,8 @@ export default function OnboardingPage() {
   const [conditions, setConditions] = useState<ConditionRow[]>([]);
   const [conditionId, setConditionId] = useState("");
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<ConditionRow[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [ageScope, setAgeScope] = useState<"pediatric" | "adult" | "both">("both");
   const [geography, setGeography] = useState("global");
   const [frequency, setFrequency] = useState<"real_time" | "daily" | "weekly" | "off">("daily");
@@ -74,11 +76,18 @@ export default function OnboardingPage() {
   }, [router, t]);
 
   useEffect(() => {
-    if (!search.trim()) return;
+    const q = search.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
     const timer = setTimeout(() => {
-      apiGet<ConditionRow[]>(`/conditions/search?q=${encodeURIComponent(search.trim())}`)
-        .then(setConditions)
-        .catch(() => {});
+      setSearchLoading(true);
+      apiGet<ConditionRow[]>(`/conditions/search?q=${encodeURIComponent(q)}`)
+        .then((rows) => setSearchResults(Array.isArray(rows) ? rows : []))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearchLoading(false));
     }, 250);
     return () => clearTimeout(timer);
   }, [search]);
@@ -167,6 +176,16 @@ export default function OnboardingPage() {
     ) : (
       error
     );
+  const searchNoResultsLabel = t.has("searchNoResults")
+    ? t("searchNoResults")
+    : locale === "he"
+      ? "לא נמצאו מצבים תואמים."
+      : "No matching conditions found.";
+  const searchAddConditionLabel = t.has("searchAddConditionLink")
+    ? t("searchAddConditionLink")
+    : locale === "he"
+      ? "הוספת מצב חדש"
+      : "Add this condition";
 
   return (
     <main className="container-page max-w-2xl py-10">
@@ -181,7 +200,55 @@ export default function OnboardingPage() {
             placeholder={t("searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.preventDefault();
+            }}
           />
+          {search.trim().length >= 2 ? (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+              {searchLoading ? (
+                <p className="text-xs text-slate-500">{t("searchLoading")}</p>
+              ) : searchResults.length ? (
+                <ul className="max-h-44 space-y-1 overflow-auto">
+                  {searchResults.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="w-full rounded-md px-2 py-1.5 text-start text-sm text-slate-800 hover:bg-slate-50"
+                        onClick={() => {
+                          setConditionId(c.id);
+                          setSearch(c.canonical_name);
+                          setConditions((prev) => (prev.some((p) => p.id === c.id) ? prev : [c, ...prev]));
+                          setSearchResults([]);
+                          setAddError("");
+                          setAddSuccess("");
+                        }}
+                      >
+                        {c.canonical_name} <span className="text-xs text-slate-500">({c.slug})</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm">
+                  <p className="text-slate-700">{searchNoResultsLabel}</p>
+                  <button
+                    type="button"
+                    className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                    onClick={() => {
+                      setShowAddCondition(true);
+                      setAddQuery(search.trim());
+                      setAddError("");
+                      setAddSuccess("");
+                    }}
+                  >
+                    <span aria-hidden>+</span>
+                    {searchAddConditionLabel}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-800">{t("conditionLabel")}</label>
