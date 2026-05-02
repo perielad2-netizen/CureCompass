@@ -30,7 +30,11 @@ from app.services.follow_relevance import (
     infer_item_audience,
 )
 from app.schemas.condition_digest import ConditionDigestOut
-from app.services.email import send_digest_email
+from app.services.email import (
+    build_digest_unsubscribe_one_click_url,
+    build_digest_unsubscribe_web_url,
+    send_digest_email,
+)
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
 
 logger = logging.getLogger(__name__)
@@ -399,7 +403,16 @@ class DigestService:
             self.db.flush()
             if pref.email_enabled:
                 try:
-                    if send_digest_email(user.email, title, body, locale=loc):
+                    web_u = build_digest_unsubscribe_web_url(user.id, loc)
+                    one_u = build_digest_unsubscribe_one_click_url(user.id)
+                    if send_digest_email(
+                        user.email,
+                        title,
+                        body,
+                        locale=loc,
+                        unsubscribe_web_url=web_u,
+                        unsubscribe_one_click_url=one_u,
+                    ):
                         row.delivered_at = datetime.now(tz=timezone.utc)
                 except (OSError, smtplib.SMTPException):
                     logger.exception("Digest email failed after AI error path")
@@ -422,7 +435,16 @@ class DigestService:
 
         if pref.email_enabled:
             try:
-                if send_digest_email(user.email, title, body, locale=loc):
+                web_u = build_digest_unsubscribe_web_url(user.id, loc)
+                one_u = build_digest_unsubscribe_one_click_url(user.id)
+                if send_digest_email(
+                    user.email,
+                    title,
+                    body,
+                    locale=loc,
+                    unsubscribe_web_url=web_u,
+                    unsubscribe_one_click_url=one_u,
+                ):
                     row.delivered_at = datetime.now(tz=timezone.utc)
             except (OSError, smtplib.SMTPException):
                 logger.exception("Digest email failed user=%s", user.id)

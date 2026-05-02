@@ -480,6 +480,14 @@
     "dailyStyle": "Daily-style",
     "weeklyStyle": "Weekly-style"
   },
+  "DigestUnsubscribe": {
+    "title": "Email preferences",
+    "loading": "Updating your preferences…",
+    "missingToken": "This link is missing a valid token. Use the unsubscribe link from your latest briefing email, or turn off email briefings in settings.",
+    "genericError": "Something went wrong. You can turn off email briefings in the app under Settings.",
+    "settingsHint": "You can change briefing email anytime in the app.",
+    "openSettings": "Open notification settings"
+  },
   "NotificationsSettings": {
     "loadError": "Could not load settings.",
     "savedAppliedAll": "Saved defaults and applied them to all conditions you follow.",
@@ -506,6 +514,10 @@
     "channels": "Channels",
     "inAppBriefings": "In-app briefings",
     "emailBriefings": "Email briefings",
+    "emailOffAllTitle": "Stop all briefing emails",
+    "emailOffAllHint": "Turns off email for research briefings on every condition you follow and updates your defaults, without changing your in-app briefing schedule.",
+    "emailOffAllButton": "Turn off email briefings for all conditions",
+    "emailOffAllSaved": "Email briefings are off for all conditions you follow. Your defaults were updated.",
     "applyAllLabel": "Also apply these defaults to <strong>every condition I already follow</strong> (overwrites per-condition settings with the choices above).",
     "saveDefaults": "Save defaults",
     "perConditionTitle": "Per condition",

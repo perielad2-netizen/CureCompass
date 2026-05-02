@@ -72,6 +72,25 @@ export default function NotificationSettingsPage() {
       .catch(() => setError(t("loadError")));
   }, [router, t]);
 
+  async function turnOffAllDigestEmail() {
+    if (!form) return;
+    setError("");
+    setSaved("");
+    try {
+      const next = { ...form, email_enabled: false };
+      await apiPut("/notification-settings", {
+        body: { ...next, apply_to_followed_conditions: true },
+      });
+      setSaved(t("emailOffAllSaved"));
+      const r = await apiGet<NotificationSettingsResponse>("/notification-settings");
+      setData(r);
+      setForm(r.defaults);
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else setError(tc("saveFailed"));
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form) return;
@@ -151,6 +170,18 @@ export default function NotificationSettingsPage() {
       <Link href="/digests" className="mt-4 ml-4 inline-block text-sm text-primary">
         {t("linkBriefings")}
       </Link>
+
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/80 p-5 shadow-calm">
+        <h2 className="text-base font-semibold text-slate-900">{t("emailOffAllTitle")}</h2>
+        <p className="mt-1 text-sm text-slate-600">{t("emailOffAllHint")}</p>
+        <button
+          type="button"
+          className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+          onClick={() => void turnOffAllDigestEmail()}
+        >
+          {t("emailOffAllButton")}
+        </button>
+      </section>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-calm">
         <h2 className="text-base font-semibold text-slate-900">{t("defaultsTitle")}</h2>

@@ -11,7 +11,11 @@ from app.db.session import get_db
 from app.models.entities import Condition, Digest, User
 from app.schemas.digest_api import DigestDetailOut, DigestGenerateIn, DigestSummaryOut
 from app.services.digest_service import DigestService
-from app.services.email import send_digest_email
+from app.services.email import (
+    build_digest_unsubscribe_one_click_url,
+    build_digest_unsubscribe_web_url,
+    send_digest_email,
+)
 
 router = APIRouter(prefix="/digests", tags=["digests"])
 
@@ -86,8 +90,17 @@ def email_digest(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digest not found")
 
     email_loc = "he" if (current_user.preferred_locale or "").lower() == "he" else "en"
+    web_u = build_digest_unsubscribe_web_url(current_user.id, email_loc)
+    one_u = build_digest_unsubscribe_one_click_url(current_user.id)
     try:
-        ok = send_digest_email(current_user.email, row.title, row.body_markdown, locale=email_loc)
+        ok = send_digest_email(
+            current_user.email,
+            row.title,
+            row.body_markdown,
+            locale=email_loc,
+            unsubscribe_web_url=web_u,
+            unsubscribe_one_click_url=one_u,
+        )
     except smtplib.SMTPAuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

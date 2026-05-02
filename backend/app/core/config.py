@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Use an address that is NOT your monitored inbox (see .env.example). Plain "Reply" targets this.
     smtp_digest_reply_to: str = ""
     password_reset_token_hours: int = 2
+    # Signed links in research-briefing emails (unsubscribe). Long-lived so older messages still work.
+    digest_unsubscribe_token_days: int = 730
+    # Optional absolute API base for List-Unsubscribe (e.g. https://api.curecompass.app/api). If empty, no List-Unsubscribe header.
+    api_public_base_url: str = ""
 
     # Private uploads (PDF text extraction MVP). Treat directory as sensitive; restrict filesystem permissions in production.
     private_documents_dir: str = "./data/private_documents"

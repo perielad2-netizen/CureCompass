@@ -1,6 +1,21 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, ai, ask_ai, auth, bookmarks, conditions, dashboard, digests, documents, health, ingestion, notifications, research_feed
+from app.api.v1.endpoints import (
+    admin,
+    ai,
+    ask_ai,
+    auth,
+    bookmarks,
+    conditions,
+    dashboard,
+    digests,
+    documents,
+    health,
+    ingestion,
+    notifications,
+    research_feed,
+    unsubscribe,
+)
 
 api_router_v1 = APIRouter()
 api_router_v1.include_router(health.router)
@@ -15,4 +30,5 @@ api_router_v1.include_router(ai.router)
 api_router_v1.include_router(ask_ai.router)
 api_router_v1.include_router(documents.router)
 api_router_v1.include_router(notifications.router)
+api_router_v1.include_router(unsubscribe.router)
 api_router_v1.include_router(research_feed.router)

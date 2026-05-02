@@ -38,3 +38,18 @@ def decode_token(token: str, *, expected_type: str | None = None) -> dict:
     if expected_type and payload.get("typ") != expected_type:
         raise ValueError("Invalid token type")
     return payload
+
+
+def create_digest_unsubscribe_token(subject: str) -> str:
+    """Long-lived signed token for one-click email unsubscribe (research briefings only)."""
+    expire = datetime.now(tz=timezone.utc) + timedelta(days=settings.digest_unsubscribe_token_days)
+    payload = {"sub": subject, "exp": expire, "typ": "digest_unsubscribe"}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def decode_digest_unsubscribe_token(token: str) -> str:
+    data = decode_token(token, expected_type="digest_unsubscribe")
+    sub = data.get("sub")
+    if not sub:
+        raise ValueError("Invalid token")
+    return str(sub)

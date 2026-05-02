@@ -6,11 +6,13 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
+from uuid import UUID
 
 import markdown
 
 from app.core.config import settings
+from app.core.security import create_digest_unsubscribe_token
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +141,30 @@ def _normalize_digest_email_locale(locale: str | None) -> str:
     return "he" if (locale or "").lower() == "he" else "en"
 
 
-def _digest_email_html(title: str, body_markdown: str, *, locale: str = "en") -> str:
+def build_digest_unsubscribe_web_url(user_id: UUID, locale: str) -> str:
+    """In-app styled confirmation page (requires token in query string)."""
+    tok = create_digest_unsubscribe_token(str(user_id))
+    loc = _normalize_digest_email_locale(locale)
+    base = settings.frontend_url.rstrip("/")
+    return f"{base}/{loc}/unsubscribe/digest?token={quote(tok, safe='')}"
+
+
+def build_digest_unsubscribe_one_click_url(user_id: UUID) -> str | None:
+    """HTTPS GET on the API for List-Unsubscribe when API_PUBLIC_BASE_URL is configured."""
+    api_base = (settings.api_public_base_url or "").strip().rstrip("/")
+    if not api_base:
+        return None
+    tok = create_digest_unsubscribe_token(str(user_id))
+    return f"{api_base}/unsubscribe/digest?token={quote(tok, safe='')}"
+
+
+def _digest_email_html(
+    title: str,
+    body_markdown: str,
+    *,
+    locale: str = "en",
+    unsubscribe_url: str | None = None,
+) -> str:
     """HTML wrapper matching CureCompass UI (navy #0b213f, teal #2cb6af, calm layout)."""
     loc = _normalize_digest_email_locale(locale)
     inner = _markdown_to_html_fragment(body_markdown)
@@ -173,6 +198,7 @@ def _digest_email_html(title: str, body_markdown: str, *, locale: str = "en") ->
               </p>
             </td>
           </tr>"""
+        unsub_label = "בטלו קבלת סיכומי מחקר במייל"
     else:
         badge = "CureCompass · Research briefing"
         badge_p_style = (
@@ -194,6 +220,19 @@ def _digest_email_html(title: str, body_markdown: str, *, locale: str = "en") ->
             <td style="padding:18px 26px 26px;">
               <p style="margin:0;font-size:11px;line-height:1.5;color:#94a3b8;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
                 Educational research summary only — not personal medical advice. Discuss with your clinician.
+              </p>
+            </td>
+          </tr>"""
+        unsub_label = "Unsubscribe from research briefing emails"
+
+    unsub_row = ""
+    if unsubscribe_url:
+        uesc = html.escape(unsubscribe_url, quote=True)
+        unsub_row = f"""
+          <tr>
+            <td style="padding:12px 26px 0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
+              <p style="margin:0;font-size:13px;line-height:1.55;">
+                <a href="{uesc}" style="color:#249890;text-decoration:none;font-weight:600;">{html.escape(unsub_label, quote=False)}</a>
               </p>
             </td>
           </tr>"""
@@ -260,7 +299,7 @@ def _digest_email_html(title: str, body_markdown: str, *, locale: str = "en") ->
             <td class="digest-content" style="padding:24px 26px 10px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;"{content_dir_attr}>
               {inner}
             </td>
-          </tr>{auto_row}{disclaimer_row}
+          </tr>{unsub_row}{auto_row}{disclaimer_row}
         </table>
         <p style="margin:18px 0 0;font-size:11px;color:#94a3b8;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
           <a href="{html.escape(settings.frontend_url.rstrip("/"), quote=True)}" style="color:#64748b;text-decoration:none;">curecompass.app</a>
@@ -361,6 +400,8 @@ def send_digest_email(
     body_text: str,
     *,
     locale: str = "en",
+    unsubscribe_web_url: str | None = None,
+    unsubscribe_one_click_url: str | None = None,
 ) -> bool:
     """Send digest as multipart (plain + HTML). Returns True if handed to SMTP, False if not configured."""
     if not settings.smtp_host:
@@ -375,6 +416,7 @@ def send_digest_email(
             "אנא אל תשיבו למייל זה — ההודעה אוטומטית ותיבת הדואר אינה נבדקת.\n\n"
             "סיכום מחקרי לצורכי הסברה בלבד — אינו מהווה ייעוץ רפואי אישי. התייעצו עם רופא/ה או אחראי טיפול."
         )
+        unsub_plain = "בטלו קבלת סיכומי מחקר במייל:\n{url}"
     else:
         text = (
             f"{body_text}\n\n"
@@ -382,8 +424,12 @@ def send_digest_email(
             "Please do not reply — this message is automated and this inbox is not monitored.\n\n"
             "Educational research summary only — not personal medical advice. Discuss with your clinician."
         )
+        unsub_plain = "Unsubscribe from research briefing emails:\n{url}"
 
-    html_body = _digest_email_html(subject, body_text, locale=loc)
+    if unsubscribe_web_url:
+        text = f"{text}\n\n---\n{unsub_plain.format(url=unsubscribe_web_url)}"
+
+    html_body = _digest_email_html(subject, body_text, locale=loc, unsubscribe_url=unsubscribe_web_url)
     logo_bytes = _read_brand_logo_bytes()
 
     if logo_bytes:
@@ -399,6 +445,8 @@ def send_digest_email(
         msg.add_alternative(html_body, subtype="html", charset="utf-8")
 
     _apply_digest_headers(msg)
+    if unsubscribe_one_click_url:
+        msg["List-Unsubscribe"] = f"<{unsubscribe_one_click_url}>"
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:

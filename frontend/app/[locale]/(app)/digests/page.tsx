@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { LtrIsland } from "@/components/ui/ltr-island";
+import { LtrInline, LtrIsland } from "@/components/ui/ltr-island";
 import { ApiError, apiDelete, apiGet, apiPost } from "@/lib/api";
 import { formatDateTimeMedium } from "@/lib/date-format";
 
@@ -175,9 +175,9 @@ export default function DigestsPage() {
                     <span className="min-w-0">
                       <span className="font-medium text-slate-900">{c.name}</span>
                       <span className="mt-0.5 block text-xs text-slate-500">
-                        <LtrIsland>
+                        <LtrInline>
                           <span>{c.slug}</span>
-                        </LtrIsland>
+                        </LtrInline>
                       </span>
                     </span>
                   </label>
@@ -221,9 +221,9 @@ export default function DigestsPage() {
         {genMsg ? (
           <p className="mt-3 text-sm text-slate-700">
             {genMsg.apiEnglish ? (
-              <LtrIsland>
+              <LtrInline>
                 <span>{genMsg.text}</span>
-              </LtrIsland>
+              </LtrInline>
             ) : (
               genMsg.text
             )}
@@ -270,12 +270,12 @@ export default function DigestsPage() {
                   <span className="shrink-0 text-xs font-medium uppercase text-slate-500">{typeLabel(r.digest_type)}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  <LtrIsland>
+                  <LtrInline>
                     <span>
                       {r.condition_name} · {formatDateTimeMedium(r.created_at)}
                       {r.email_delivered ? ` · ${t("emailed")}` : ""}
                     </span>
-                  </LtrIsland>
+                  </LtrInline>
                 </p>
               </Link>
               <div className="flex shrink-0 border-s border-slate-100">
