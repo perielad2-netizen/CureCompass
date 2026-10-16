@@ -1,8 +1,8 @@
 # GPT-6 Luna bounded evaluation report
 
-- Generated (UTC): 2026-10-16T07:38:05.455593+00:00
+- Generated (UTC): 2026-10-16T07:38:44.932970+00:00
 - Mode: `dry_run`
-- Branch/SHA: `migrate/openai-gpt-6-luna` / `f5e57f8160c578411cf49b5e4f0c151f17701721`
+- Branch/SHA: `migrate/openai-gpt-6-luna` / `083dad399aee38ed7b3b625b8f2bb6254ddbd285`
 - Live requests: 0
 - Estimated total cost (usage-based estimate): $0.000000
 - Spending ceiling: $0.05

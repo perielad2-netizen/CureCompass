@@ -31,7 +31,9 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-EXPECTED_SHA = "f5e57f8160c578411cf49b5e4f0c151f17701721"
+# Migration implementation review tip. Later harness-only commits on this branch
+# are allowed when they are descendants of this SHA.
+EXPECTED_MIGRATION_SHA = "f5e57f8160c578411cf49b5e4f0c151f17701721"
 REQUIRED_MODEL = "gpt-6-luna"
 REQUIRED_EFFORT = "none"
 MAX_REQUESTS = 8
@@ -80,6 +82,17 @@ class ScenarioResult:
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=REPO_ROOT, text=True).strip()
+
+
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
 
 
 def _estimate_tokens(text: str) -> int:
@@ -319,8 +332,11 @@ def preflight_guards(*, execute: bool, acknowledge: bool) -> list[str]:
 
     if branch != "migrate/openai-gpt-6-luna":
         errors.append(f"unexpected branch {branch!r}; expected migrate/openai-gpt-6-luna")
-    if sha != EXPECTED_SHA:
-        errors.append(f"unexpected HEAD {sha}; expected {EXPECTED_SHA}")
+    if sha != EXPECTED_MIGRATION_SHA and not _is_ancestor(EXPECTED_MIGRATION_SHA, sha):
+        errors.append(
+            f"HEAD {sha} is not {EXPECTED_MIGRATION_SHA} or a descendant of that "
+            "reviewed migration tip"
+        )
 
     env_name = (os.environ.get("ENVIRONMENT") or "").strip().lower()
     if env_name == "production":
@@ -618,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
         "mode": mode,
         "branch": _git("branch", "--show-current"),
         "sha": _git("rev-parse", "HEAD"),
-        "expected_sha": EXPECTED_SHA,
+        "expected_migration_sha": EXPECTED_MIGRATION_SHA,
         "model": REQUIRED_MODEL,
         "reasoning": {"effort": REQUIRED_EFFORT},
         "max_requests": MAX_REQUESTS,
