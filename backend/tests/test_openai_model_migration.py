@@ -1,6 +1,7 @@
 """Focused tests for OpenAI Responses model migration (gpt-6-luna).
 
 Uses mocked OpenAI clients only — never calls the live API.
+Settings are patched via scoped monkeypatch so globals restore after each test.
 """
 
 from __future__ import annotations
@@ -15,7 +16,32 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.schemas.ai_enrichment import ResearchItemEnrichmentOut
 from app.schemas.private_document import PrivateDocumentEnrichmentOut
-from app.services.openai_responses import responses_create_kwargs, responses_reasoning_param
+from app.services import openai_responses as or_mod
+from app.services.openai_responses import (
+    model_is_legacy_non_reasoning,
+    model_supports_responses_reasoning,
+    responses_create_kwargs,
+    responses_reasoning_param,
+    supported_reasoning_efforts,
+)
+
+
+@pytest.fixture
+def patch_openai_settings(monkeypatch: pytest.MonkeyPatch):
+    """Install a fresh Settings instance on all modules that cache ``settings``."""
+
+    def _apply(**env: str) -> Settings:
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        fresh = Settings(_env_file=None)
+        monkeypatch.setattr("app.core.config.settings", fresh)
+        monkeypatch.setattr("app.services.openai_responses.settings", fresh)
+        monkeypatch.setattr("app.services.ai_enrichment_service.settings", fresh)
+        monkeypatch.setattr("app.services.private_document_pipeline.settings", fresh)
+        monkeypatch.setattr("app.api.v1.endpoints.ask_ai.settings", fresh)
+        return fresh
+
+    return _apply
 
 
 def test_default_responses_model_is_gpt_6_luna():
@@ -34,16 +60,11 @@ def test_env_override_responses_model(monkeypatch: pytest.MonkeyPatch):
     assert s.openai_embedding_model == "text-embedding-3-large"
 
 
-def test_responses_create_kwargs_includes_model_and_reasoning(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("OPENAI_RESPONSES_MODEL", "gpt-6-luna")
-    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "none")
-    # Reload settings used by the helper module
-    from app.core import config as config_mod
-    from app.services import openai_responses as or_mod
-
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-
+def test_gpt6_luna_includes_configured_reasoning(patch_openai_settings):
+    patch_openai_settings(
+        OPENAI_RESPONSES_MODEL="gpt-6-luna",
+        OPENAI_REASONING_EFFORT="none",
+    )
     kwargs = responses_create_kwargs(
         input=[{"role": "user", "content": "x"}],
         text={"format": {"type": "json_schema", "name": "T", "schema": {}, "strict": True}},
@@ -53,17 +74,77 @@ def test_responses_create_kwargs_includes_model_and_reasoning(monkeypatch: pytes
     assert kwargs["reasoning"] == {"effort": "none"}
     assert kwargs["timeout"] == 90
     assert kwargs["text"]["format"]["type"] == "json_schema"
+    assert kwargs["text"]["format"]["strict"] is True
     assert "temperature" not in kwargs
 
 
-def test_reasoning_param_normalizes_effort(monkeypatch: pytest.MonkeyPatch):
-    from app.core import config as config_mod
-    from app.services import openai_responses as or_mod
+def test_gpt41_mini_rollback_omits_reasoning(patch_openai_settings):
+    """Legacy rollback must not send reasoning (non-reasoning model)."""
+    patch_openai_settings(
+        OPENAI_RESPONSES_MODEL="gpt-4.1-mini",
+        OPENAI_REASONING_EFFORT="none",
+    )
+    kwargs = responses_create_kwargs(
+        input=[{"role": "user", "content": "x"}],
+        text={"format": {"type": "json_schema", "name": "T", "schema": {}, "strict": True}},
+        timeout=90,
+    )
+    assert kwargs["model"] == "gpt-4.1-mini"
+    assert "reasoning" not in kwargs
+    assert kwargs["text"]["format"]["strict"] is True
+    assert model_is_legacy_non_reasoning("gpt-4.1-mini")
+    assert responses_reasoning_param(model="gpt-4.1-mini") is None
 
-    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "MEDIUM")
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
+
+def test_gpt41_mini_snapshot_rollback_omits_reasoning(patch_openai_settings):
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="gpt-4.1-mini-2025-04-14")
+    kwargs = responses_create_kwargs(
+        input=[{"role": "user", "content": "x"}],
+        text={"format": {"type": "json_schema", "name": "T", "schema": {}, "strict": True}},
+        timeout=60,
+    )
+    assert kwargs["model"] == "gpt-4.1-mini-2025-04-14"
+    assert "reasoning" not in kwargs
+
+
+def test_unknown_model_override_omits_reasoning(patch_openai_settings):
+    """Do not assume unknown models accept reasoning."""
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="some-future-model")
+    assert model_supports_responses_reasoning("some-future-model") is False
+    assert supported_reasoning_efforts("some-future-model") is None
+    kwargs = responses_create_kwargs(
+        input=[{"role": "user", "content": "x"}],
+        text={"format": {"type": "json_schema", "name": "T", "schema": {}, "strict": True}},
+        timeout=30,
+    )
+    assert kwargs["model"] == "some-future-model"
+    assert "reasoning" not in kwargs
+
+
+def test_invalid_reasoning_effort_for_luna_raises(patch_openai_settings):
+    patch_openai_settings(
+        OPENAI_RESPONSES_MODEL="gpt-6-luna",
+        OPENAI_REASONING_EFFORT="ultra",
+    )
+    with pytest.raises(ValueError, match="Unsupported OPENAI_REASONING_EFFORT"):
+        responses_create_kwargs(
+            input=[{"role": "user", "content": "x"}],
+            text={"format": {"type": "json_schema", "name": "T", "schema": {}, "strict": True}},
+            timeout=90,
+        )
+
+
+def test_reasoning_param_normalizes_effort(patch_openai_settings):
+    patch_openai_settings(
+        OPENAI_RESPONSES_MODEL="gpt-6-luna",
+        OPENAI_REASONING_EFFORT="MEDIUM",
+    )
     assert responses_reasoning_param() == {"effort": "medium"}
+
+
+def test_luna_snapshot_supports_reasoning():
+    assert model_supports_responses_reasoning("gpt-6-luna-2026-10-01") is True
+    assert "none" in (supported_reasoning_efforts("gpt-6-luna-2026-10-01") or set())
 
 
 def _enrichment_json() -> dict:
@@ -84,16 +165,13 @@ def _enrichment_json() -> dict:
     }
 
 
-def test_enrich_one_uses_configured_model_and_parses_json(monkeypatch: pytest.MonkeyPatch):
-    from app.core import config as config_mod
+def test_enrich_one_uses_configured_model_and_parses_json(patch_openai_settings):
     from app.services import ai_enrichment_service as aes
-    from app.services import openai_responses as or_mod
 
-    monkeypatch.setenv("OPENAI_RESPONSES_MODEL", "gpt-6-luna")
-    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "none")
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-    aes.settings = config_mod.settings
+    patch_openai_settings(
+        OPENAI_RESPONSES_MODEL="gpt-6-luna",
+        OPENAI_REASONING_EFFORT="none",
+    )
 
     payload = _enrichment_json()
     mock_client = MagicMock()
@@ -121,15 +199,35 @@ def test_enrich_one_uses_configured_model_and_parses_json(monkeypatch: pytest.Mo
     assert call_kwargs["text"]["format"]["strict"] is True
 
 
-def test_enrich_one_fails_safely_on_empty_output(monkeypatch: pytest.MonkeyPatch):
-    from app.core import config as config_mod
+def test_enrich_one_legacy_rollback_request_omits_reasoning(patch_openai_settings):
     from app.services import ai_enrichment_service as aes
-    from app.services import openai_responses as or_mod
 
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-    aes.settings = config_mod.settings
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="gpt-4.1-mini")
+    payload = _enrichment_json()
+    mock_client = MagicMock()
+    mock_client.responses.create.return_value = SimpleNamespace(output_text=json.dumps(payload))
 
+    svc = aes.AIEnrichmentService(db=MagicMock())
+    svc.client = mock_client
+    condition = SimpleNamespace(canonical_name="C")
+    item = SimpleNamespace(
+        item_type="paper",
+        source_url="u",
+        published_at=None,
+        title="t",
+        abstract_or_body="abstract body text for grounding",
+    )
+    svc.enrich_one(condition, item)  # type: ignore[arg-type]
+    call_kwargs = mock_client.responses.create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-4.1-mini"
+    assert "reasoning" not in call_kwargs
+    assert call_kwargs["text"]["format"]["strict"] is True
+
+
+def test_enrich_one_fails_safely_on_empty_output(patch_openai_settings):
+    from app.services import ai_enrichment_service as aes
+
+    patch_openai_settings()
     mock_client = MagicMock()
     mock_client.responses.create.return_value = SimpleNamespace(output_text=None, output=[])
 
@@ -147,15 +245,10 @@ def test_enrich_one_fails_safely_on_empty_output(monkeypatch: pytest.MonkeyPatch
         svc.enrich_one(condition, item)  # type: ignore[arg-type]
 
 
-def test_enrich_one_fails_safely_on_malformed_json(monkeypatch: pytest.MonkeyPatch):
-    from app.core import config as config_mod
+def test_enrich_one_fails_safely_on_malformed_json(patch_openai_settings):
     from app.services import ai_enrichment_service as aes
-    from app.services import openai_responses as or_mod
 
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-    aes.settings = config_mod.settings
-
+    patch_openai_settings()
     mock_client = MagicMock()
     mock_client.responses.create.return_value = SimpleNamespace(output_text="{not-json")
 
@@ -173,15 +266,10 @@ def test_enrich_one_fails_safely_on_malformed_json(monkeypatch: pytest.MonkeyPat
         svc.enrich_one(condition, item)  # type: ignore[arg-type]
 
 
-def test_private_document_enrichment_uses_model(monkeypatch: pytest.MonkeyPatch):
-    from app.core import config as config_mod
-    from app.services import openai_responses as or_mod
+def test_private_document_enrichment_uses_model(patch_openai_settings):
     from app.services import private_document_pipeline as pdp
 
-    monkeypatch.setenv("OPENAI_RESPONSES_MODEL", "gpt-6-luna")
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-    pdp.settings = config_mod.settings
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="gpt-6-luna")
 
     payload = {
         "patient_summary": "Summary of the document.",
@@ -203,16 +291,11 @@ def test_private_document_enrichment_uses_model(monkeypatch: pytest.MonkeyPatch)
     assert call_kwargs["reasoning"]["effort"] == "none"
 
 
-def test_ask_ai_raw_request_contract(monkeypatch: pytest.MonkeyPatch):
+def test_ask_ai_raw_request_contract(patch_openai_settings):
     from app.api.v1.endpoints import ask_ai as ask_mod
-    from app.core import config as config_mod
     from app.schemas.ask_ai import AskAIAnswerOut
-    from app.services import openai_responses as or_mod
 
-    monkeypatch.setenv("OPENAI_RESPONSES_MODEL", "gpt-6-luna")
-    config_mod.settings = Settings(_env_file=None)
-    or_mod.settings = config_mod.settings
-    ask_mod.settings = config_mod.settings
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="gpt-6-luna")
 
     minimal = {
         "direct_answer": "a",
@@ -242,6 +325,13 @@ def test_ask_ai_raw_request_contract(monkeypatch: pytest.MonkeyPatch):
     assert call_kwargs["model"] == "gpt-6-luna"
     assert call_kwargs["reasoning"] == {"effort": "none"}
     assert call_kwargs["text"]["format"]["strict"] is True
+
+
+def test_settings_restored_after_override(patch_openai_settings):
+    """Isolation: patching must not leak into subsequent Settings() defaults."""
+    patch_openai_settings(OPENAI_RESPONSES_MODEL="gpt-4.1-mini")
+    assert or_mod.settings.openai_responses_model == "gpt-4.1-mini"
+    # Fixture teardown happens after this test; next suite tests re-read defaults.
 
 
 def test_embedding_model_unchanged_in_settings():
