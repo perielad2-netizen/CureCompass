@@ -126,30 +126,52 @@ Covered with **mocked** OpenAI only:
 
 ## Bounded synthetic live evaluation harness
 
-Reproducible harness (defaults to **dry-run**):
+Reproducible harness (defaults to **dry-run**; no network):
 
 ```bash
 cd backend
 python scripts/gpt6_luna_bounded_eval.py
 ```
 
-Live execution (PM authorization required; never print the API key):
+Mocked safety tests:
+
+```bash
+cd backend
+pytest tests/test_gpt6_luna_bounded_eval.py -q
+```
+
+Live execution (PM authorization required; never print the API key; **not** run in this amendment):
 
 ```powershell
 cd backend
 $env:OPENAI_RESPONSES_MODEL = 'gpt-6-luna'
 $env:OPENAI_REASONING_EFFORT = 'none'
 # OPENAI_API_KEY must already be set in the operator shell
+# Unset OPENAI_BASE_URL / OPENAI_API_BASE / OPENAI_API_BASE_URL (official endpoint only)
 python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-test
 ```
 
-Guards: expected branch/SHA, non-production environment, max 8 Responses calls, `gpt-6-luna` + `reasoning.effort=none`, strict JSON Schema, `max_retries=0`, projected cost ceiling **$0.05**, synthetic fixtures only. Does not modify `backend/.env` or use production DB/SMTP.
+### Safety guards (live)
 
-Reports are written under `docs/evals/` (JSON + latest markdown). Client-side budget checks are **estimates**, not an absolute billing guarantee.
+| Guard | Behavior |
+| --- | --- |
+| Branch | Must be `migrate/openai-gpt-6-luna` |
+| Reviewed migration baseline | Core app migration files must match SHA `f5e57f8160c578411cf49b5e4f0c151f17701721`; HEAD may be a descendant that only amends harness/docs/tests |
+| Endpoint isolation | Fail closed if `OPENAI_BASE_URL` / `OPENAI_API_BASE` / `OPENAI_API_BASE_URL` point away from `https://api.openai.com/v1` |
+| Auth / ack | Live requires `OPENAI_API_KEY` and `--i-acknowledge-paid-openai-test` |
+| Stop on any failure | Refusal, incomplete status, invalid JSON, Pydantic failure, unexpected model, missing usage, or provider error → no further requests; remaining scenarios marked `skipped` |
+| Retries | `max_retries=0` |
+| Request cap | Max **8** Responses calls |
+| Cost controls | Conservative preflight estimate includes full request serialization + JSON Schema + reserved output tokens + headroom; after each response, usage-based spend updates the running estimate; stop if usage missing, remaining budget insufficient, or observed overspend |
+| Spending ceiling | Estimated total **$0.05** (client-side estimate only — **not** an absolute OpenAI billing guarantee) |
+| Error sanitization | Reports/console use short classifications only; no API keys, auth headers, request/response bodies, or patient-like content |
+| Scope | Synthetic fixtures only; does not modify `backend/.env`; no production DB/SMTP |
+
+Latest concise report: `docs/evals/gpt6-luna-bounded-eval-latest.md`. Prefer updating that file over committing repetitive timestamped dry-run JSON.
 
 ## Remaining live validation requirements
 
-- Operator must set `OPENAI_API_KEY` in the shell and run the harness with `--execute --i-acknowledge-paid-openai-test` under PM spend authorization
+- Operator must unset endpoint overrides, set `OPENAI_API_KEY` in the shell, and run the harness with `--execute --i-acknowledge-paid-openai-test` under PM spend authorization
 - Production env + dependency (`openai>=1.66.0`) confirmation after merge/deploy
 - Cost / latency observation under `reasoning.effort=none` on representative traffic
 
