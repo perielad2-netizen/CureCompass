@@ -140,16 +140,7 @@ cd backend
 pytest tests/test_gpt6_luna_bounded_eval.py -q
 ```
 
-Live execution (PM authorization required; never print the API key; **not** run in this amendment):
-
-```powershell
-cd backend
-$env:OPENAI_RESPONSES_MODEL = 'gpt-6-luna'
-$env:OPENAI_REASONING_EFFORT = 'none'
-# OPENAI_API_KEY must already be set in the operator shell
-# Unset OPENAI_BASE_URL / OPENAI_API_BASE / OPENAI_API_BASE_URL (official endpoint only)
-python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-test
-```
+The bounded live run for this milestone already succeeded (see below). Do not repeat it unless a later PM authorization asks for a new sample.
 
 ### Safety guards (live)
 
@@ -169,13 +160,50 @@ python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-t
 
 Latest concise report: `docs/evals/gpt6-luna-bounded-eval-latest.md`. Prefer updating that file over committing repetitive timestamped dry-run JSON.
 
-## Remaining live validation requirements
+## Synthetic live API validation (completed)
 
-- Operator must unset endpoint overrides, set `OPENAI_API_KEY` in the shell, and run the harness with `--execute --i-acknowledge-paid-openai-test` under PM spend authorization
-- Production env + dependency (`openai>=1.66.0`) confirmation after merge/deploy
-- Cost / latency observation under `reasoning.effort=none` on representative traffic
+**Status: LIVE API VALIDATED. Production is not deployed.**
 
-Not done automatically: live/paid OpenAI calls without a shell API key, production env changes, deploy, DB migrations, historical AI row rewrites.
+Operator-run bounded live evaluation on 2026-10-16 (report generated `2026-10-16T08:04:04.837173+00:00`). Evidence: `docs/evals/gpt6-luna-bounded-eval-latest.md`.
+
+| Field | Result |
+| --- | --- |
+| Mode | `live` |
+| Recommendation | **PASS** |
+| Model / reasoning | `gpt-6-luna` / `none` |
+| Branch / SHA | `migrate/openai-gpt-6-luna` / `32a7be983d202d463fc315beac1099358acff6e8` |
+| Requests | 8 |
+| Passed / failed | 8 / 0 |
+| Automated warnings | none |
+| Input / output / reasoning tokens | 3050 / 2389 / 0 |
+| Usage-based estimated API cost | **$0.001500** |
+| Conservative preflight estimate | $0.004226 |
+| Estimated spending ceiling | $0.05 (client-side estimate only) |
+
+All eight synthetic scenarios passed with strict JSON Schema / Pydantic validation and no automated warnings:
+
+1. Research enrichment EN+HE — 634 / 416 / 0
+2. Ask AI English — 406 / 336 / 0
+3. Ask AI Hebrew — 409 / 396 / 0
+4. Condition resolution — 257 / 148 / 0
+5. English digest — 387 / 260 / 0
+6. Hebrew digest — 384 / 490 / 0
+7. Private document summarization — 233 / 145 / 0
+8. Insufficient evidence / uncertainty — 340 / 198 / 0
+
+This confirms synthetic API compatibility (English and Hebrew structured responses). It is **not** independent medical or editorial review, and it does **not** mean the model is in production.
+
+No additional live tests are required for this milestone. Do not re-run the harness dry-run against this tree if that would overwrite the preserved live report.
+
+## Remaining release steps (not live API)
+
+- **LIVE API VALIDATED** — bounded synthetic evaluation above is complete
+- **PRODUCTION DEPLOYED** — not done
+- After merge approval: set production `OPENAI_RESPONSES_MODEL=gpt-6-luna`, `OPENAI_REASONING_EFFORT=none`, confirm `openai>=1.66.0`, then restart API / worker / beat under a separate deploy approval
+- Human medical / editorial review of real answers remains a separate process
+- Do not rewrite historical AI rows
+
+Not part of this PR: production env edits, deploy, service restarts, DB migrations, historical data rewrites.
 
 ## Rollback
 
