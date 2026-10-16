@@ -124,13 +124,36 @@ Covered with **mocked** OpenAI only:
 - Enrichment / Ask AI / private-doc request contracts
 - Scoped settings patching (no global settings leak across tests)
 
+## Bounded synthetic live evaluation harness
+
+Reproducible harness (defaults to **dry-run**):
+
+```bash
+cd backend
+python scripts/gpt6_luna_bounded_eval.py
+```
+
+Live execution (PM authorization required; never print the API key):
+
+```powershell
+cd backend
+$env:OPENAI_RESPONSES_MODEL = 'gpt-6-luna'
+$env:OPENAI_REASONING_EFFORT = 'none'
+# OPENAI_API_KEY must already be set in the operator shell
+python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-test
+```
+
+Guards: expected branch/SHA, non-production environment, max 8 Responses calls, `gpt-6-luna` + `reasoning.effort=none`, strict JSON Schema, `max_retries=0`, projected cost ceiling **$0.05**, synthetic fixtures only. Does not modify `backend/.env` or use production DB/SMTP.
+
+Reports are written under `docs/evals/` (JSON + latest markdown). Client-side budget checks are **estimates**, not an absolute billing guarantee.
+
 ## Remaining live validation requirements
 
-- Authorized live smoke: enrichment, Ask AI (HE/EN), digests, private document summarization, structured-answer fallback
+- Operator must set `OPENAI_API_KEY` in the shell and run the harness with `--execute --i-acknowledge-paid-openai-test` under PM spend authorization
 - Production env + dependency (`openai>=1.66.0`) confirmation after merge/deploy
 - Cost / latency observation under `reasoning.effort=none` on representative traffic
 
-Not done in this PR: live/paid OpenAI calls, production env changes, deploy, DB migrations, historical AI row rewrites.
+Not done automatically: live/paid OpenAI calls without a shell API key, production env changes, deploy, DB migrations, historical AI row rewrites.
 
 ## Rollback
 

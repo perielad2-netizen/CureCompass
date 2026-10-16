@@ -1,0 +1,220 @@
+{
+  "generated_at": "2026-10-16T07:37:39.822183+00:00",
+  "mode": "live",
+  "branch": "migrate/openai-gpt-6-luna",
+  "sha": "f5e57f8160c578411cf49b5e4f0c151f17701721",
+  "expected_sha": "f5e57f8160c578411cf49b5e4f0c151f17701721",
+  "model": "gpt-6-luna",
+  "reasoning": {
+    "effort": "none"
+  },
+  "max_requests": 8,
+  "spending_ceiling_usd": 0.05,
+  "projected_max_cost_usd": 0.003457,
+  "billing_disclaimer": "Client-side spending guards are estimates only and are not an absolute OpenAI billing guarantee.",
+  "guards": [
+    "FAIL: OPENAI_API_KEY is not set in the operator shell"
+  ],
+  "live_requests": 0,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "total_reasoning_tokens": 0,
+  "total_estimated_cost_usd": 0.0,
+  "results": [
+    {
+      "id": "1_enrichment",
+      "title": "Research enrichment (EN + HE fields)",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ResearchItemEnrichmentOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=319",
+        "preflight est_cost=$0.000632"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "2_ask_ai_en",
+      "title": "Ask AI English",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=209",
+        "preflight est_cost=$0.000421"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "3_ask_ai_he",
+      "title": "Ask AI Hebrew",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=201",
+        "preflight est_cost=$0.000420"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "4_condition_resolve",
+      "title": "Condition resolution",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionResolutionAI",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=90",
+        "preflight est_cost=$0.000209"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "5_digest_en",
+      "title": "English digest",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionDigestOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=218",
+        "preflight est_cost=$0.000622"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "6_digest_he",
+      "title": "Hebrew digest",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionDigestOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=214",
+        "preflight est_cost=$0.000621"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "7_private_doc",
+      "title": "Private document summary",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "PrivateDocumentEnrichmentOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=191",
+        "preflight est_cost=$0.000319"
+      ],
+      "error": "skipped due to failed guards"
+    },
+    {
+      "id": "8_insufficient_evidence",
+      "title": "Insufficient evidence / uncertainty",
+      "status": "skipped",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "preflight est_in=129",
+        "preflight est_cost=$0.000213"
+      ],
+      "error": "skipped due to failed guards"
+    }
+  ],
+  "recommendation": "FAIL",
+  "stop_reason": "preflight guards failed",
+  "operator_command": "cd backend; $env:OPENAI_RESPONSES_MODEL='gpt-6-luna'; $env:OPENAI_REASONING_EFFORT='none'; # set OPENAI_API_KEY in shell without printing it; python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-test"
+}

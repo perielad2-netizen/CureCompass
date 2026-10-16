@@ -1,0 +1,245 @@
+{
+  "generated_at": "2026-10-16T07:38:05.455593+00:00",
+  "mode": "dry_run",
+  "branch": "migrate/openai-gpt-6-luna",
+  "sha": "f5e57f8160c578411cf49b5e4f0c151f17701721",
+  "expected_sha": "f5e57f8160c578411cf49b5e4f0c151f17701721",
+  "model": "gpt-6-luna",
+  "reasoning": {
+    "effort": "none"
+  },
+  "max_requests": 8,
+  "spending_ceiling_usd": 0.05,
+  "projected_max_cost_usd": 0.003457,
+  "billing_disclaimer": "Client-side spending guards are estimates only and are not an absolute OpenAI billing guarantee.",
+  "guards": [
+    "branch/SHA ok",
+    "ENVIRONMENT not production",
+    "strict json_schema on all requests",
+    "model=gpt-6-luna",
+    "reasoning.effort=none",
+    "no tools",
+    "projected_max_cost=$0.003457 <= $0.05",
+    "dry-run (no network)",
+    "acknowledgement not required for dry-run",
+    "OPENAI_API_KEY not required for dry-run"
+  ],
+  "live_requests": 0,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "total_reasoning_tokens": 0,
+  "total_estimated_cost_usd": 0.0,
+  "results": [
+    {
+      "id": "1_enrichment",
+      "title": "Research enrichment (EN + HE fields)",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ResearchItemEnrichmentOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=1200",
+        "preflight_est_input_tokens=319",
+        "preflight_est_cost_usd=0.000632"
+      ],
+      "error": null
+    },
+    {
+      "id": "2_ask_ai_en",
+      "title": "Ask AI English",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=800",
+        "preflight_est_input_tokens=209",
+        "preflight_est_cost_usd=0.000421"
+      ],
+      "error": null
+    },
+    {
+      "id": "3_ask_ai_he",
+      "title": "Ask AI Hebrew",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=800",
+        "preflight_est_input_tokens=201",
+        "preflight_est_cost_usd=0.000420"
+      ],
+      "error": null
+    },
+    {
+      "id": "4_condition_resolve",
+      "title": "Condition resolution",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionResolutionAI",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=400",
+        "preflight_est_input_tokens=90",
+        "preflight_est_cost_usd=0.000209"
+      ],
+      "error": null
+    },
+    {
+      "id": "5_digest_en",
+      "title": "English digest",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionDigestOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=1200",
+        "preflight_est_input_tokens=218",
+        "preflight_est_cost_usd=0.000622"
+      ],
+      "error": null
+    },
+    {
+      "id": "6_digest_he",
+      "title": "Hebrew digest",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "ConditionDigestOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=1200",
+        "preflight_est_input_tokens=214",
+        "preflight_est_cost_usd=0.000621"
+      ],
+      "error": null
+    },
+    {
+      "id": "7_private_doc",
+      "title": "Private document summary",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "PrivateDocumentEnrichmentOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=600",
+        "preflight_est_input_tokens=191",
+        "preflight_est_cost_usd=0.000319"
+      ],
+      "error": null
+    },
+    {
+      "id": "8_insufficient_evidence",
+      "title": "Insufficient evidence / uncertainty",
+      "status": "dry_run",
+      "model_requested": "gpt-6-luna",
+      "model_returned": null,
+      "reasoning": {
+        "effort": "none"
+      },
+      "schema_name": "AskAIAnswerOut",
+      "strict": true,
+      "pydantic_ok": null,
+      "incomplete": null,
+      "latency_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null,
+      "estimated_cost_usd": null,
+      "notes": [
+        "keys=['input', 'max_output_tokens', 'model', 'reasoning', 'text', 'timeout']",
+        "max_output_tokens=400",
+        "preflight_est_input_tokens=129",
+        "preflight_est_cost_usd=0.000213"
+      ],
+      "error": null
+    }
+  ],
+  "recommendation": "DRY_RUN_PASS",
+  "stop_reason": "Dry-run only. To execute live: set OPENAI_API_KEY in the shell, then rerun with --execute --i-acknowledge-paid-openai-test",
+  "operator_command": "cd backend; $env:OPENAI_RESPONSES_MODEL='gpt-6-luna'; $env:OPENAI_REASONING_EFFORT='none'; # set OPENAI_API_KEY in shell without printing it; python scripts/gpt6_luna_bounded_eval.py --execute --i-acknowledge-paid-openai-test"
+}
