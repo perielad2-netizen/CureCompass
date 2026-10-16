@@ -10,6 +10,7 @@ from app.models.entities import Condition, EvidenceStage, ResearchItem, Research
 from app.core.config import settings
 from app.schemas.ai_enrichment import ResearchItemEnrichmentOut
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
+from app.services.openai_responses import responses_create_kwargs
 
 
 @dataclass
@@ -64,13 +65,14 @@ class AIEnrichmentService:
         prompt_input = self._build_input(condition, item)
 
         resp = self.client.responses.create(
-            model=settings.openai_responses_model,
-            input=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt_input},
-            ],
-            text=self._json_schema_text_config(),
-            timeout=90,
+            **responses_create_kwargs(
+                input=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt_input},
+                ],
+                text=self._json_schema_text_config(),
+                timeout=90,
+            )
         )
 
         # responses API returns JSON in output_text when using json_schema response_format.

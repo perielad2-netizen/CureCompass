@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     openai_api_key: str = ""
-    openai_responses_model: str = "gpt-4.1-mini"
+    # Default Responses model (OPENAI_RESPONSES_MODEL). gpt-4.1-mini shuts down 2027-01-14.
+    openai_responses_model: str = "gpt-6-luna"
+    # Responses API reasoning.effort for latency-sensitive JSON workflows (gpt-6-luna supports none).
+    openai_reasoning_effort: str = "none"
     openai_embedding_model: str = "text-embedding-3-large"
 
     # After ingestion adds new research_items, start plain-language AI enrichment in the background.

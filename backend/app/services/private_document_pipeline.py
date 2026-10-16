@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.models.entities import UserPrivateDocument
 from app.schemas.private_document import PrivateDocumentEnrichmentOut
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
+from app.services.openai_responses import responses_create_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,11 @@ def enrich_document_text(*, text: str, condition_name: str, answer_locale: str) 
     )
     client = OpenAI(api_key=settings.openai_api_key)
     response = client.responses.create(
-        model=settings.openai_responses_model,
-        input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        text=_enrichment_schema_config(),
-        timeout=120,
+        **responses_create_kwargs(
+            input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            text=_enrichment_schema_config(),
+            timeout=120,
+        )
     )
     raw = getattr(response, "output_text", None)
     if not raw:
