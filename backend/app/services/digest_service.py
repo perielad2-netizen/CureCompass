@@ -36,6 +36,7 @@ from app.services.email import (
     send_digest_email,
 )
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
+from app.services.openai_responses import responses_create_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -299,10 +300,11 @@ class DigestService:
         )
 
         resp = client.responses.create(
-            model=settings.openai_responses_model,
-            input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            text=_digest_schema_text_config(),
-            timeout=120,
+            **responses_create_kwargs(
+                input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                text=_digest_schema_text_config(),
+                timeout=120,
+            )
         )
         raw = getattr(resp, "output_text", None)
         if not raw:

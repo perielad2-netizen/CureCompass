@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.entities import Condition
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
+from app.services.openai_responses import responses_create_kwargs
 
 
 def _norm_spaces(s: str) -> str:
@@ -152,10 +153,11 @@ def resolve_with_openai(user_query: str, locale: str) -> ConditionResolutionAI:
 
     client = OpenAI(api_key=settings.openai_api_key)
     response = client.responses.create(
-        model=settings.openai_responses_model,
-        input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        text=_condition_ai_schema_config(),
-        timeout=60,
+        **responses_create_kwargs(
+            input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            text=_condition_ai_schema_config(),
+            timeout=60,
+        )
     )
     raw = getattr(response, "output_text", None)
     if not raw:

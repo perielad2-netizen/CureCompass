@@ -52,6 +52,7 @@ from app.services.ask_ai_structured import (
     merge_structured_into_answer_payload,
 )
 from app.services.openai_json_schema import patch_json_schema_for_openai_strict
+from app.services.openai_responses import responses_create_kwargs
 from app.services.private_document_pipeline import build_private_context_chunks
 from app.services.retrieval import RetrievalService
 
@@ -75,10 +76,11 @@ def _ask_ai_schema_text_config(schema_model: type[BaseModel]) -> dict:
 
 def _openai_ask_ai_raw(client: OpenAI, *, system: str, user: str, schema_model: type[BaseModel]) -> str:
     response = client.responses.create(
-        model=settings.openai_responses_model,
-        input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        text=_ask_ai_schema_text_config(schema_model),
-        timeout=90,
+        **responses_create_kwargs(
+            input=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            text=_ask_ai_schema_text_config(schema_model),
+            timeout=90,
+        )
     )
     raw = getattr(response, "output_text", None)
     if not raw:
