@@ -162,7 +162,7 @@ Latest concise report: `docs/evals/gpt6-luna-bounded-eval-latest.md`. Prefer upd
 
 ## Synthetic live API validation (completed)
 
-**Status: LIVE API VALIDATED. Production is not deployed.**
+**Status: LIVE API VALIDATED** (bounded harness). See production section below for deploy state.
 
 Operator-run bounded live evaluation on 2026-10-16 (report generated `2026-10-16T08:04:04.837173+00:00`). Evidence: `docs/evals/gpt6-luna-bounded-eval-latest.md`.
 
@@ -191,19 +191,55 @@ All eight synthetic scenarios passed with strict JSON Schema / Pydantic validati
 7. Private document summarization — 233 / 145 / 0
 8. Insufficient evidence / uncertainty — 340 / 198 / 0
 
-This confirms synthetic API compatibility (English and Hebrew structured responses). It is **not** independent medical or editorial review, and it does **not** mean the model is in production.
+This confirms synthetic API compatibility (English and Hebrew structured responses). It is **not** independent medical or editorial review.
 
-No additional live tests are required for this milestone. Do not re-run the harness dry-run against this tree if that would overwrite the preserved live report.
+No additional live harness runs are required for this milestone. Do not re-run the harness dry-run against this tree if that would overwrite the preserved live report.
 
-## Remaining release steps (not live API)
+## Production deployment (2026-10-16)
 
-- **LIVE API VALIDATED** — bounded synthetic evaluation above is complete
-- **PRODUCTION DEPLOYED** — not done
-- After merge approval: set production `OPENAI_RESPONSES_MODEL=gpt-6-luna`, `OPENAI_REASONING_EFFORT=none`, confirm `openai>=1.66.0`, then restart API / worker / beat under a separate deploy approval
-- Human medical / editorial review of real answers remains a separate process
+**Status: PRODUCTION CODE DEPLOYED** at SHA `9d37425ed29526519cf65f06d8bb3c44cfe21e4f` on VPS path `/opt/CureCompass`.
+
+| Field | Confirmed production state |
+| --- | --- |
+| Deployed SHA | `9d37425` (`9d37425ed29526519cf65f06d8bb3c44cfe21e4f`) |
+| Responses model | `gpt-6-luna` |
+| Reasoning effort | `none` |
+| Python | 3.12.3 |
+| OpenAI Python SDK | 2.30.0 |
+| API / Celery worker / Beat | active |
+| NRestarts after recovery | 0 |
+| Three consecutive API health checks | PASS |
+| Recent service errors (post-recovery) | none |
+| Database migration for this release | none |
+| Frontend deploy for this release | none |
+
+### Permissions incident and recovery (same day)
+
+**Root cause:** the deployment shell used `umask 077` before `git merge --ff-only`. Seven updated Python files were written as `root:root` mode `600`. The `curecompass` service account could not read them. All three backend units failed with `PermissionError` on `app/core/config.py`.
+
+**Recovery:** carefully restored readability on the affected code files (no recursive tree `chmod`/`chown`), validated imports as user `curecompass`, then restarted only the affected CureCompass services. Services recovered; restart counts returned to 0; health checks passed.
+
+**Prevention:** follow the hardened procedure in [deploy-github-linux.md](deploy-github-linux.md) §6 (`umask 022` for Git checkout; keep `.env`/backups private separately; verify readability and offline imports **as the service account** before restart). Optional read-only helper: `backend/scripts/release_preflight.py`.
+
+### What production verification does and does not mean
+
+| Verified | Not independently completed |
+| --- | --- |
+| Operational health: units active, health endpoint PASS, no recent post-recovery errors | Production end-to-end **model-response** validation against live user/clinical workflows |
+| Configured model / reasoning names as above | Independent **clinical / editorial** review of production answers |
+| Pre-merge bounded synthetic live eval (8/8) on an earlier SHA | Re-running paid OpenAI evals in production as part of this hardening doc update |
+
+Operational health ≠ clinical quality sign-off. Human medical / editorial review of real answers remains a separate process. Do not rewrite historical AI rows.
+
+## Remaining follow-ups
+
+- **LIVE API VALIDATED** (bounded synthetic harness) — complete
+- **PRODUCTION DEPLOYED** (SHA `9d37425`) — complete after permissions recovery
+- Adopt hardened deploy docs / optional `release_preflight.py` on the next maintenance merge
+- Clinical / editorial review — **not** independently completed
 - Do not rewrite historical AI rows
 
-Not part of this PR: production env edits, deploy, service restarts, DB migrations, historical data rewrites.
+This documentation update does not perform production SSH, env edits, OpenAI calls, migrations, or service restarts.
 
 ## Rollback
 

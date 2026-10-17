@@ -234,18 +234,179 @@ Often a second `systemctl restart curecompass-api` after the old master exits is
 
 ---
 
-## 6. Ongoing updates
+## 6. Ongoing updates (hardened release procedure)
+
+Use this procedure for production code updates under `/opt/CureCompass`. It exists to prevent the **2026-10-16** outage where a deploy shell used `umask 077` before `git merge --ff-only`, leaving updated Python files as `root:root` mode `600` so the `curecompass` service account could not read them (`PermissionError` on `app/core/config.py`).
+
+### 6.1 Hard rules
+
+- **Git checkout umask:** use `umask 022` for `fetch` / `merge` / `pull` so tracked source files are world-readable (`644` / `755`), not `600`.
+- **Secrets stay private separately:** keep `backend/.env`, `frontend/.env.local`, backup tarballs, and similar secrets at `600` (owner-only). Do **not** rely on a restrictive shell umask to protect them during Git operations.
+- **Preserve ownership and permissions:** do **not** run recursive `chmod -R` or `chown -R` on the tree after pull.
+- **No blind cleanup:** never run `git clean -fdx`, `git reset --hard`, or similar unless a named rollback plan explicitly requires it and untracked production files (`.env`, uploads, local overrides) are backed up and listed first.
+- **Preserve untracked production files:** `.env`, uploads, venv, and local config must remain untouched by Git.
+- **Never print secrets** in shell history dumps, journal snippets pasted to tickets, or preflight logs (no `cat .env`, no `printenv` of API keys).
+- **Restart only affected CureCompass units.** Do **not** restart PickWise, FashionRise, synagogue, or unrelated host services.
+- **Do not migrate or rebuild by default.** Run Alembic / frontend build only when that release explicitly requires it.
+
+### 6.2 Identify the service account (do not assume)
+
+```bash
+# Prefer the User= from the API unit (typical: curecompass)
+systemctl show curecompass-api -p User --value
+# Cross-check worker/beat if needed:
+systemctl show curecompass-worker -p User --value
+systemctl show curecompass-beat -p User --value
+```
+
+Export it for the rest of the session:
+
+```bash
+export CC_SERVICE_USER="$(systemctl show curecompass-api -p User --value)"
+# Fallback only if units omit User= and you have confirmed the account:
+# export CC_SERVICE_USER=curecompass
+test -n "$CC_SERVICE_USER"
+```
+
+### 6.3 Pre-update snapshot (read-only where possible)
 
 ```bash
 cd /opt/CureCompass
-git pull
-cd backend && source .venv/bin/activate && alembic upgrade head && deactivate
-cd ../frontend && npm ci && npm run build
-sudo systemctl restart curecompass-api curecompass-web curecompass-worker curecompass-beat
-sudo nginx -t && sudo systemctl reload nginx   # only if you changed Nginx
+git rev-parse HEAD
+git status --short   # expect untracked .env / local files; do not delete them
+sudo systemctl is-active curecompass-api curecompass-worker curecompass-beat
+# Optional read-only helper (makes zero filesystem/process changes):
+sudo -u "$CC_SERVICE_USER" /opt/CureCompass/backend/.venv/bin/python \
+  /opt/CureCompass/backend/scripts/release_preflight.py
 ```
 
-If you only changed **backend** `.env`: restart `curecompass-api` (and worker/beat if they rely on the same vars). If you only changed **frontend** `NEXT_PUBLIC_*`: rebuild + restart `curecompass-web`.
+The script must run **as the service account** and must not write files.
+
+### 6.4 Fetch and fast-forward with umask 022
+
+```bash
+cd /opt/CureCompass
+umask 022
+git fetch origin
+# Prefer an explicit SHA for production releases:
+git merge --ff-only <TARGET_SHA>
+# Or, only when intentionally tracking a branch tip:
+# git merge --ff-only origin/main
+git rev-parse HEAD
+```
+
+If the merge is not a fast-forward, **stop**. Do not force-reset. Resolve on a maintenance branch / PR first.
+
+### 6.5 Verify changed Python file readability (service account)
+
+List files changed by the update (example: previous HEAD `OLD_SHA` → `HEAD`):
+
+```bash
+OLD_SHA=<previous_sha>
+git diff --name-only "$OLD_SHA" HEAD -- '*.py'
+```
+
+For each changed `.py` path (or run the preflight script), confirm the **service account** can read it. Example for one file:
+
+```bash
+sudo -u "$CC_SERVICE_USER" test -r /opt/CureCompass/backend/app/core/config.py
+# Expect exit 0. If not: fix that file's mode/ownership individually — never chmod -R.
+ls -l /opt/CureCompass/backend/app/core/config.py
+# Healthy tracked source: typically owner-readable and group/other-readable (e.g. 644),
+# owned consistently with the rest of the tree. Mode 600 owned by root is the failure mode from 2026-10-16.
+```
+
+**If readability fails:** restore only the affected paths (e.g. `chmod 644` on those specific files, or re-checkout those paths under `umask 022`). Do **not** recursively re-own the tree. Re-run the service-account read checks before continuing.
+
+### 6.6 Offline import / config checks AS the service account (before restart)
+
+These checks must **not** call OpenAI, must **not** print secret values, and must run as `$CC_SERVICE_USER`:
+
+```bash
+cd /opt/CureCompass/backend
+sudo -u "$CC_SERVICE_USER" bash -lc '
+  set -euo pipefail
+  cd /opt/CureCompass/backend
+  source .venv/bin/activate
+  python -c "from app.core.config import get_settings; s=get_settings(); print(\"config_ok\", s.openai_responses_model, s.openai_reasoning_effort)"
+  python -c "from app.main import app; print(\"app_import_ok\", app.title)"
+'
+```
+
+Optional: run `backend/scripts/release_preflight.py` (read-only) the same way. Fix any `PermissionError` / import failure **before** restarting units.
+
+### 6.7 Restart only affected CureCompass services
+
+Backend-only release (typical for model / Python changes; **no** frontend rebuild):
+
+```bash
+sudo systemctl restart curecompass-api curecompass-worker curecompass-beat
+```
+
+Frontend-only release (after an explicit `npm ci` + `npm run build` when that release requires it):
+
+```bash
+sudo systemctl restart curecompass-web
+```
+
+Env-only backend change: restart `curecompass-api` and, if the same vars apply, `curecompass-worker` / `curecompass-beat`.
+
+Do **not** restart unrelated host services.
+
+### 6.8 Bounded health retries
+
+```bash
+for i in 1 2 3 4 5; do
+  if curl -fsS --max-time 5 http://127.0.0.1:8000/health >/dev/null \
+    || curl -fsS --max-time 5 http://127.0.0.1/api/health >/dev/null; then
+    echo "health_ok attempt=$i"
+    break
+  fi
+  echo "health_retry attempt=$i"
+  sleep 3
+  if [ "$i" -eq 5 ]; then
+    echo "health_failed after 5 attempts" >&2
+    exit 1
+  fi
+done
+
+sudo systemctl is-active curecompass-api curecompass-worker curecompass-beat
+sudo systemctl show curecompass-api curecompass-worker curecompass-beat -p NRestarts --no-pager
+```
+
+Expect units `active` and restart counters stable after recovery. Prefer local/loopback health URLs so Nginx/TLS is not required for the gate.
+
+### 6.9 Failure diagnosis (no secrets)
+
+```bash
+sudo systemctl status curecompass-api curecompass-worker curecompass-beat --no-pager
+sudo journalctl -u curecompass-api -u curecompass-worker -u curecompass-beat -n 80 --no-pager
+# Look for PermissionError / ImportError on app.core.config — do not paste .env contents.
+ls -l backend/app/core/config.py
+sudo -u "$CC_SERVICE_USER" test -r backend/app/core/config.py || echo "UNREADABLE_BY_SERVICE_USER"
+```
+
+### 6.10 Rollback (preserve untracked files)
+
+1. Note current `git rev-parse HEAD` and the last-known-good SHA.
+2. Under `umask 022`, fast-forward or check out the known-good **tracked** commit only (`git merge --ff-only <GOOD_SHA>` or an explicit deploy of that SHA). Prefer ff-only / checked-out release tags over destructive history rewrite.
+3. **Never** `git reset --hard` or `git clean` blindly — those can destroy untracked `.env` and production data.
+4. Re-run §6.5–§6.8 as the service account.
+5. Restart only the affected CureCompass units again.
+6. For model rollback only (while the legacy model remains available): set `OPENAI_RESPONSES_MODEL=gpt-4.1-mini` in `.env` (edit carefully; do not log the file), then restart API / worker / beat. See [OPENAI_MODEL_MIGRATION.md](OPENAI_MODEL_MIGRATION.md).
+
+### 6.11 Migrations and frontend (only when required)
+
+```bash
+# Backend schema — only if the release notes say so:
+cd /opt/CureCompass/backend && source .venv/bin/activate && alembic upgrade head && deactivate
+
+# Frontend — only if the release includes UI changes:
+cd /opt/CureCompass/frontend && npm ci && npm run build
+sudo systemctl restart curecompass-web
+```
+
+Nginx reload only if you changed Nginx config: `sudo nginx -t && sudo systemctl reload nginx`.
 
 ---
 
