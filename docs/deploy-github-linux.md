@@ -275,8 +275,9 @@ cd /opt/CureCompass
 git rev-parse HEAD
 git status --short   # expect untracked .env / local files; do not delete them
 sudo systemctl is-active curecompass-api curecompass-worker curecompass-beat
-# Optional read-only helper (makes zero filesystem/process changes):
-sudo -u "$CC_SERVICE_USER" /opt/CureCompass/backend/.venv/bin/python \
+# Optional read-only helper (makes zero filesystem/process changes; -B avoids .pyc):
+sudo -u "$CC_SERVICE_USER" env PYTHONDONTWRITEBYTECODE=1 \
+  /opt/CureCompass/backend/.venv/bin/python -B \
   /opt/CureCompass/backend/scripts/release_preflight.py
 ```
 
@@ -320,20 +321,35 @@ ls -l /opt/CureCompass/backend/app/core/config.py
 
 ### 6.6 Offline import / config checks AS the service account (before restart)
 
-These checks must **not** call OpenAI, must **not** print secret values, and must run as `$CC_SERVICE_USER`:
+These checks must **not** call OpenAI / SMTP / DB / Redis clients for I/O, must **not** print secret values, and must run as `$CC_SERVICE_USER`. Use `python -B` (or `PYTHONDONTWRITEBYTECODE=1`) so imports do not write `.pyc` files.
+
+Application config is the module-level object `settings` from `app.core.config` — there is **no** `get_settings()`.
+
+Preferred (read-only helper; checks `app/**/*.py` readability, then imports API + Celery entrypoints):
 
 ```bash
-cd /opt/CureCompass/backend
+sudo -u "$CC_SERVICE_USER" env PYTHONDONTWRITEBYTECODE=1 \
+  /opt/CureCompass/backend/.venv/bin/python -B \
+  /opt/CureCompass/backend/scripts/release_preflight.py
+# Optionally limit readability checks to files changed since the previous deploy SHA:
+#   ... release_preflight.py --since "$OLD_SHA"
+```
+
+Manual equivalent (names only; never `cat` `.env`):
+
+```bash
 sudo -u "$CC_SERVICE_USER" bash -lc '
   set -euo pipefail
   cd /opt/CureCompass/backend
   source .venv/bin/activate
-  python -c "from app.core.config import get_settings; s=get_settings(); print(\"config_ok\", s.openai_responses_model, s.openai_reasoning_effort)"
-  python -c "from app.main import app; print(\"app_import_ok\", app.title)"
+  export PYTHONDONTWRITEBYTECODE=1
+  python -B -c "from app.core.config import settings; print(\"config_ok\", settings.openai_responses_model, settings.openai_reasoning_effort)"
+  python -B -c "from app.main import app; print(\"app_import_ok\", app.title)"
+  python -B -c "from app.workers.celery_app import celery_app; print(\"celery_import_ok\", celery_app.main)"
 '
 ```
 
-Optional: run `backend/scripts/release_preflight.py` (read-only) the same way. Fix any `PermissionError` / import failure **before** restarting units.
+Fix any readability / import failure **before** restarting units.
 
 ### 6.7 Restart only affected CureCompass services
 
@@ -355,26 +371,30 @@ Do **not** restart unrelated host services.
 
 ### 6.8 Bounded health retries
 
+Verified production health path on Gunicorn is **`/api/health`** (router prefix `/api` + route `/health`). Do **not** probe `/health` on port 8000 — that path is not mounted.
+
 ```bash
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/api/health}"
+health_ok=0
 for i in 1 2 3 4 5; do
-  if curl -fsS --max-time 5 http://127.0.0.1:8000/health >/dev/null \
-    || curl -fsS --max-time 5 http://127.0.0.1/api/health >/dev/null; then
-    echo "health_ok attempt=$i"
+  if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then
+    echo "health_ok attempt=$i url=$HEALTH_URL"
+    health_ok=1
     break
   fi
   echo "health_retry attempt=$i"
   sleep 3
-  if [ "$i" -eq 5 ]; then
-    echo "health_failed after 5 attempts" >&2
-    exit 1
-  fi
 done
+if [ "$health_ok" -ne 1 ]; then
+  echo "health_failed after 5 attempts url=$HEALTH_URL" >&2
+  exit 1
+fi
 
 sudo systemctl is-active curecompass-api curecompass-worker curecompass-beat
 sudo systemctl show curecompass-api curecompass-worker curecompass-beat -p NRestarts --no-pager
 ```
 
-Expect units `active` and restart counters stable after recovery. Prefer local/loopback health URLs so Nginx/TLS is not required for the gate.
+Expect units `active` and restart counters stable after recovery. Prefer the loopback Gunicorn URL above so Nginx/TLS is not required for the gate. (Public Nginx path is the same `/api/health` on the site origin.)
 
 ### 6.9 Failure diagnosis (no secrets)
 
@@ -388,12 +408,41 @@ sudo -u "$CC_SERVICE_USER" test -r backend/app/core/config.py || echo "UNREADABL
 
 ### 6.10 Rollback (preserve untracked files)
 
-1. Note current `git rev-parse HEAD` and the last-known-good SHA.
-2. Under `umask 022`, fast-forward or check out the known-good **tracked** commit only (`git merge --ff-only <GOOD_SHA>` or an explicit deploy of that SHA). Prefer ff-only / checked-out release tags over destructive history rewrite.
-3. **Never** `git reset --hard` or `git clean` blindly — those can destroy untracked `.env` and production data.
-4. Re-run §6.5–§6.8 as the service account.
-5. Restart only the affected CureCompass units again.
-6. For model rollback only (while the legacy model remains available): set `OPENAI_RESPONSES_MODEL=gpt-4.1-mini` in `.env` (edit carefully; do not log the file), then restart API / worker / beat. See [OPENAI_MODEL_MIGRATION.md](OPENAI_MODEL_MIGRATION.md).
+`git merge --ff-only <GOOD_SHA>` **cannot** move HEAD backward to an ancestor. Fast-forward only advances when the target is a descendant of `HEAD`. Use one of the guarded procedures below instead.
+
+**A. Git code rollback to a known-good commit** (restores tracked tree; keeps untracked secrets/data):
+
+```bash
+cd /opt/CureCompass
+BAD_SHA="$(git rev-parse HEAD)"
+GOOD_SHA="<known_good_sha>"   # e.g. last healthy production deploy
+git rev-parse --verify "${GOOD_SHA}^{commit}"
+git log --oneline "$GOOD_SHA".."$BAD_SHA"   # review what you are leaving
+
+# Confirm untracked production files you must keep:
+git status --short   # expect .env / uploads / local overrides — do not delete them
+
+umask 022
+# Detached checkout of the good commit updates tracked files only.
+# It does NOT remove untracked files. Do not add -f unless you have a named conflict plan.
+# Never run git clean or git reset --hard for this rollback.
+git switch --detach "$GOOD_SHA"
+# Older Git: git checkout --detach "$GOOD_SHA"
+
+git rev-parse HEAD   # must equal GOOD_SHA
+```
+
+Then re-run §6.5–§6.8 as the service account and restart **only** the affected CureCompass units.
+
+To return to branch tracking later (separate maintenance step): merge or redeploy a fixed commit via the normal §6.4 ff-only forward path — do not invent a backward ff-only.
+
+**B. Model-only configuration rollback** (no Git move; while `gpt-4.1-mini` remains available):
+
+1. Edit `backend/.env` carefully: set `OPENAI_RESPONSES_MODEL=gpt-4.1-mini` (do not log or `cat` the file).
+2. Restart only `curecompass-api`, `curecompass-worker`, `curecompass-beat`.
+3. See [OPENAI_MODEL_MIGRATION.md](OPENAI_MODEL_MIGRATION.md).
+
+Keep **A** and **B** distinct: code SHA rollback vs env model override.
 
 ### 6.11 Migrations and frontend (only when required)
 

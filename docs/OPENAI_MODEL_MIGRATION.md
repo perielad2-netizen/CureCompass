@@ -219,7 +219,7 @@ No additional live harness runs are required for this milestone. Do not re-run t
 
 **Recovery:** carefully restored readability on the affected code files (no recursive tree `chmod`/`chown`), validated imports as user `curecompass`, then restarted only the affected CureCompass services. Services recovered; restart counts returned to 0; health checks passed.
 
-**Prevention:** follow the hardened procedure in [deploy-github-linux.md](deploy-github-linux.md) §6 (`umask 022` for Git checkout; keep `.env`/backups private separately; verify readability and offline imports **as the service account** before restart). Optional read-only helper: `backend/scripts/release_preflight.py`.
+**Prevention:** follow the hardened procedure in [deploy-github-linux.md](deploy-github-linux.md) §6 (`umask 022` for Git checkout; keep `.env`/backups private separately; verify readability and offline imports **as the service account** before restart; health probe `http://127.0.0.1:8000/api/health`; rollback via `git switch --detach <GOOD_SHA>`, not backward `merge --ff-only`). Optional read-only helper: `backend/scripts/release_preflight.py` (uses `app.core.config.settings`, not `get_settings`).
 
 ### What production verification does and does not mean
 
